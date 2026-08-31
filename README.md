@@ -4,15 +4,52 @@ herdr の左ペインにエージェント、右ペインにこのビューア�
 
 ## 新しいマシンで使う
 
+**先に確認すること: そのマシンで既に nvim を使っているか。**
+
 ```bash
-git clone <このリポジトリ> ~/.config/nvim
+ls -la ~/.config/nvim
+```
+
+### A. 何も入っていない場合
+
+```bash
+git clone git@github.com:sei-newbear/nvim-viewer.git ~/.config/nvim
 ~/.config/nvim/scripts/bootstrap.sh
 nvim
 ```
 
+### B. 既に nvim を使っている場合（上書きしてはいけない）
+
+**この設定は閲覧専用ビューアーなので、既存の設定に被せるとそのマシンで編集ができなくなる。**
+
+| すること | 影響 |
+|---|---|
+| 通常バッファを `modifiable = false` にする | 編集できなくなる |
+| `:w` を握り潰す | 保存できなくなる |
+| `q` を `<Nop>` にする | マクロ記録が使えなくなる |
+| `grn` / `gra` / `grx` / `gcc` を削除する | リネーム・コードアクションが消える |
+| `lazy` が `lua/plugins/` を丸ごと import する | 相手のプラグイン定義まで読み込んで競合する |
+
+`init.lua` も同名なので上書きされ、既存の設定は失われる。
+**`NVIM_APPNAME` で並べて入れる。** 設定もプラグインも完全に分かれる。
+
+```bash
+git clone git@github.com:sei-newbear/nvim-viewer.git ~/.config/viewer
+NVIM_APPNAME=viewer ~/.config/viewer/scripts/bootstrap.sh
+nvim-viewer          # bootstrap.sh がこの起動コマンドを用意する
+```
+
+| | 設定 | プラグイン |
+|---|---|---|
+| `nvim`（従来どおり） | `~/.config/nvim` | `~/.local/share/nvim` |
+| `nvim-viewer` | `~/.config/viewer` | `~/.local/share/viewer` |
+
+---
+
 `bootstrap.sh` は **sudo を使わず**、依存（Neovim・tree-sitter CLI・言語サーバ・
 mermaid 関連）を導入し、Chrome のパスを検出して `mermaid-puppeteer.json` を生成し、
 パーサーを入れて、最後に動作確認まで走らせる。**何度実行しても壊れない。**
+`~/.config/nvim` を symlink にして実体を別の場所に置く構成にも対応している。
 
 ### このリポジトリについて
 
