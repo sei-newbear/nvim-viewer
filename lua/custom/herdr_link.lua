@@ -175,14 +175,29 @@ end
 -- ---- ビジュアルモード: 選択範囲を送信 ----
 -- 注意: ビジュアルモード中のマッピングでは '< '> はまだ更新されておらず
 -- 「1つ前の選択範囲」を指してしまう。そのため getpos("v") と getpos(".") を使う。
+--- ビジュアルモードで選択したテキストを取得し、文脈としてエージェントへ送信する関数
+---
+--- 選択モードをそのまま尊重する:
+---   v      文字単位 → 選んだ文字だけ（識別子ひとつを聞きたいとき）
+---   V      行単位   → 行まるごと
+---   Ctrl-V 矩形     → 矩形の範囲
+--- 行単位で決め打ちにすると、`v` で語を選んでも行全体が送られて
+--- 「選んだものと違う」ことになる。getregion() がモードを見て取り分ける。
 function M.send_selection()
+  local mode = vim.fn.mode()
+  if not mode:match("^[vV\22]") then mode = "v" end
+
   local vpos = vim.fn.getpos("v")
   local cpos = vim.fn.getpos(".")
   local srow = math.min(vpos[2], cpos[2])
   local erow = math.max(vpos[2], cpos[2])
 
-  local lines = vim.fn.getline(srow, erow)
-  if type(lines) ~= "table" then lines = { tostring(lines) } end
+  local ok, lines = pcall(vim.fn.getregion, vpos, cpos, { type = mode })
+  if not ok or type(lines) ~= "table" or #lines == 0 then
+    -- getregion が使えない環境向けの保険（行単位で取る）
+    lines = vim.fn.getline(srow, erow)
+    if type(lines) ~= "table" then lines = { tostring(lines) } end
+  end
   if #lines == 0 then
     vim.notify("選択範囲が空です", vim.log.levels.WARN)
     return
@@ -191,7 +206,16 @@ function M.send_selection()
   -- ビジュアルモードを抜ける
   vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
 
-  deliver(build_context(srow, erow, lines), string.format("%d行のコード", #lines))
+  -- 1行の一部だけを選んだ場合に「1行のコード」と出ると紛らわしいので、
+  -- 短い選択はその中身をそのまま見せる
+  local label
+  local joined = table.concat(lines, " ")
+  if #lines == 1 and vim.fn.strdisplaywidth(joined) <= 30 then
+    label = ("「%s」"):format(vim.trim(joined))
+  else
+    label = ("%d行のコード"):format(#lines)
+  end
+  deliver(build_context(srow, erow, lines), label)
 end
 
 -- ---- ノーマルモード: 現在行の位置情報を送信 ----
