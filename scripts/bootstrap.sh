@@ -26,6 +26,22 @@ head_() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 has() { command -v "$1" >/dev/null 2>&1; }
 
 # -------------------------------------------------------------------
+head_ "0. 置き場所の確認"
+# -------------------------------------------------------------------
+# nvim は $XDG_CONFIG_HOME/nvim（既定は ~/.config/nvim）しか見ない。
+# 別の場所に clone した状態で実行すると、プラグインやパーサーの導入だけが
+# 「本物の設定」に対して行われ、意図しない結果になる。
+EXPECTED="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
+if [ "$NVIM_DIR" != "$(cd "$EXPECTED" 2>/dev/null && pwd || echo "")" ]; then
+  printf '  \033[33m!\033[0m このリポジトリは %s にあります\n' "$NVIM_DIR"
+  printf '    nvim が読むのは %s です。\n' "$EXPECTED"
+  printf '    そこへ clone し直すか、symlink を張ってから実行してください。\n\n'
+  printf '    中断しました。\n'
+  exit 1
+fi
+ok "配置は正しい（$NVIM_DIR）"
+
+# -------------------------------------------------------------------
 head_ "1. 前提ツールの確認"
 # -------------------------------------------------------------------
 for c in git curl; do
@@ -145,7 +161,14 @@ fi
 head_ "7. プラグインとパーサーの導入"
 # -------------------------------------------------------------------
 if has nvim; then
-  nvim --headless "+Lazy! sync" +qa >/dev/null 2>&1 && ok "プラグインを導入" || warn "プラグインの導入に失敗"
+  # ★ sync ではなく restore を使う。
+  #   sync  = 最新に更新する（lazy-lock.json の固定を無視して書き換えてしまう）
+  #   restore = lazy-lock.json のコミット通りに入れる
+  # 「どのマシンでも同じ版が入る」「勝手に更新されない」という利点は
+  # restore を使って初めて成立する。
+  nvim --headless "+Lazy! install" +qa >/dev/null 2>&1
+  nvim --headless "+Lazy! restore" +qa >/dev/null 2>&1 \
+    && ok "プラグインをロック通りに導入" || warn "プラグインの導入に失敗"
 
   echo "  パーサーを導入中（数分かかります）..."
   nvim --headless -c 'lua
@@ -168,7 +191,10 @@ fi
 head_ "8. 動作確認"
 # -------------------------------------------------------------------
 if has nvim; then
-  result=$(nvim --headless -c 'lua
+  # LSP の確認は実際のソースファイルで行う（空バッファでは起動しない）
+  probe=$(git -C "$NVIM_DIR" ls-files '*.lua' 2>/dev/null | head -1)
+  probe="${probe:+$NVIM_DIR/$probe}"
+  result=$(nvim --headless ${probe:+"$probe"} -c 'lua vim.wait(2500)' -c 'lua
 local n = 0
 for l in vim.fn.execute("messages"):gmatch("[^\n]+") do
   if l:match("^E%d+:") then n = n + 1 end
