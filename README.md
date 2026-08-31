@@ -38,15 +38,15 @@ nvim-viewer
 **`NVIM_APPNAME` で並べて入れる。** 設定もプラグインも完全に分かれる。
 
 ```bash
-git clone https://github.com/sei-newbear/nvim-viewer.git ~/.config/viewer
-NVIM_APPNAME=viewer ~/.config/viewer/scripts/bootstrap.sh
+git clone https://github.com/sei-newbear/nvim-viewer.git ~/.config/nvim-viewer
+NVIM_APPNAME=nvim-viewer ~/.config/nvim-viewer/scripts/bootstrap.sh
 nvim-viewer
 ```
 
 | | 設定 | プラグイン |
 |---|---|---|
 | `nvim`（従来どおり） | `~/.config/nvim` | `~/.local/share/nvim` |
-| `nvim-viewer` | `~/.config/viewer` | `~/.local/share/viewer` |
+| `nvim-viewer` | `~/.config/nvim-viewer` | `~/.local/share/nvim-viewer` |
 
 ---
 

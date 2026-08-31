@@ -112,14 +112,14 @@ mise ls 2>/dev/null
 **`NVIM_APPNAME` を使って並べて入れる。** 設定もプラグインも完全に分かれる。
 
 ```sh
-git clone <repo> ~/.config/viewer
-NVIM_APPNAME=viewer ~/.config/viewer/scripts/bootstrap.sh
+git clone <repo> ~/.config/nvim-viewer
+NVIM_APPNAME=nvim-viewer ~/.config/nvim-viewer/scripts/bootstrap.sh
 ```
 
 | | 設定 | プラグイン |
 |---|---|---|
 | `nvim`（従来どおり） | `~/.config/nvim` | `~/.local/share/nvim` |
-| `nvim-viewer`（このビューアー） | `~/.config/viewer` | `~/.local/share/viewer` |
+| `nvim-viewer`（このビューアー） | `~/.config/nvim-viewer` | `~/.local/share/nvim-viewer` |
 
 `bootstrap.sh` が `~/.local/bin/nvim-viewer` という起動用ラッパーを作る
 （既に同名のファイルがあり、それが自分の作ったものでなければ上書きしない）。

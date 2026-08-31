@@ -7,8 +7,8 @@
 #
 # 既に nvim を使っているマシンでは、設定を上書きせず並べて入れること:
 #
-#   git clone <repo> ~/.config/viewer
-#   NVIM_APPNAME=viewer ~/.config/viewer/scripts/bootstrap.sh
+#   git clone <repo> ~/.config/nvim-viewer
+#   NVIM_APPNAME=nvim-viewer ~/.config/nvim-viewer/scripts/bootstrap.sh
 #
 #   → 設定もプラグインも既存の nvim と完全に分かれる。
 #     起動は nvim-viewer（このスクリプトが用意する）。
@@ -60,8 +60,8 @@ if [ "$NVIM_DIR" != "$(cd "$EXPECTED" 2>/dev/null && pwd -P || echo "")" ]; then
   printf '    NVIM_APPNAME=%s なので、nvim が読むのは %s です。\n' "$APPNAME" "$EXPECTED"
   printf '    そこへ clone し直すか、symlink を張ってから実行してください。\n\n'
   printf '    既存の nvim 設定を持つマシンなら、上書きせず別名で入れてください:\n'
-  printf '      git clone <repo> ~/.config/viewer\n'
-  printf '      NVIM_APPNAME=viewer ~/.config/viewer/scripts/bootstrap.sh\n\n'
+  printf '      git clone <repo> ~/.config/nvim-viewer\n'
+  printf '      NVIM_APPNAME=nvim-viewer ~/.config/nvim-viewer/scripts/bootstrap.sh\n\n'
   printf '    中断しました。\n'
   exit 1
 fi
