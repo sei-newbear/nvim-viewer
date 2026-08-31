@@ -46,6 +46,9 @@ return {
         { "kotlin_language_server", "kotlin-language-server" },
         { "hls",            "haskell-language-server-wrapper" },
         { "ocamllsp",       "ocamllsp" },
+        { "metals",         "metals" },                    -- Scala
+        -- Dart は実行ファイルが SDK 本体（dart language-server）
+        { "dartls",         "dart" },
 
         -- 動的言語
         { "pyright",        "pyright-langserver" },
@@ -54,6 +57,7 @@ return {
         { "solargraph",     "solargraph",   skip_if = "ruby_lsp" },
         { "intelephense",   "intelephense" },              -- PHP
         { "phpactor",       "phpactor",     skip_if = "intelephense" },
+        { "clojure_lsp",    "clojure-lsp" },
       }
 
       local enabled = {}

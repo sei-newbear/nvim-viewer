@@ -195,20 +195,25 @@ if has nvim; then
     && ok "プラグインをロック通りに導入" || warn "プラグインの導入に失敗"
 
   echo "  パーサーを導入中（数分かかります）..."
+  # 一覧は lua/core/parsers.lua が持つ。ここに書き写すとズレるので読む。
   nvim --headless -c 'lua
 local ok, ts = pcall(require, "nvim-treesitter")
 if not ok then vim.cmd("qa!") end
-local want = {"bash","c","css","diff","go","html","javascript","json",
-  "lua","luadoc","markdown","markdown_inline","python","query","regex",
-  "ruby","rust","sql","toml","tsx","typescript","vim","vimdoc","yaml"}
+local ok2, want = pcall(require, "core.parsers")
+if not ok2 then vim.cmd("qa!") end
 local h = ts.install(want)
-if h and h.wait then h:wait(560000) end
+if h and h.wait then h:wait(900000) end
 vim.cmd("qa!")' >/dev/null 2>&1
   n=$(nvim --headless -c 'lua
 local ok, ts = pcall(require, "nvim-treesitter")
 io.stderr:write(ok and tostring(#ts.get_installed()) or "0")
 vim.cmd("qa!")' 2>&1 | tail -1)
-  [ "${n:-0}" -ge 20 ] && ok "パーサー $n 件を導入" || warn "パーサーが $n 件しか入っていない"
+  want_n=$(nvim --headless -c 'lua
+local ok, l = pcall(require, "core.parsers")
+io.stderr:write(ok and tostring(#l) or "0")
+vim.cmd("qa!")' 2>&1 | tail -1)
+  [ "${n:-0}" -ge "${want_n:-20}" ] && ok "パーサー $n 件を導入" \
+    || warn "パーサーが $n 件しか入っていない（${want_n:-?} 件を想定）"
 fi
 
 # -------------------------------------------------------------------

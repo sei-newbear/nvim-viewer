@@ -10,12 +10,9 @@
 -- FileType で vim.treesitter.start() を自分で呼ぶ必要がある。
 -- ===================================================================
 
-local ENSURE = {
-  -- 注意: main ブランチに jsonc は無い（json が jsonc も扱う）
-  "bash", "c", "css", "diff", "go", "html", "javascript", "json",
-  "lua", "luadoc", "markdown", "markdown_inline", "python", "query", "regex",
-  "ruby", "rust", "sql", "toml", "tsx", "typescript", "vim", "vimdoc", "yaml",
-}
+-- 一覧は lua/core/parsers.lua に置く（bootstrap.sh も同じものを読む）。
+-- 注意: main ブランチに jsonc は無い（json が jsonc も扱う）
+local ENSURE = require("core.parsers")
 
 return {
   {
