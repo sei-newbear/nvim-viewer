@@ -170,9 +170,22 @@ function M.open_commit()
     vim.notify("この行はまだコミットされていません", vim.log.levels.INFO)
     return
   end
-  vim.notify(("%s の差分を開きます: %s"):format(sha:sub(1, 7), c and c.summary or ""),
-    vim.log.levels.INFO)
-  vim.cmd("DiffviewOpen " .. sha .. "^!")
+  -- そのコミットが触った全ファイルではなく、**今見ているファイルだけ**に絞る。
+  -- 知りたいのは「この行がなぜこうなったか」であって、
+  -- 同じコミットの他ファイルまでは要らない。
+  local file = vim.api.nvim_buf_get_name(buf)
+  local dir = vim.fn.fnamemodify(file, ":h")
+  local rel = file
+  local root = vim.system({ "git", "-C", dir, "rev-parse", "--show-toplevel" },
+    { text = true }):wait()
+  if root.code == 0 and root.stdout then
+    local top = vim.trim(root.stdout)
+    if top ~= "" and file:sub(1, #top + 1) == top .. "/" then rel = file:sub(#top + 2) end
+  end
+
+  vim.notify(("%s • %s\n（q または Space dc で戻る）"):format(
+    sha:sub(1, 7), c and c.summary or ""), vim.log.levels.INFO)
+  vim.cmd(("DiffviewOpen %s^! -- %s"):format(sha, vim.fn.fnameescape(rel)))
 end
 
 -- ---- モードの切替 ----

@@ -35,6 +35,15 @@ return {
           -- ため、すべて無効化する。マージ作業は別のツールで行う。
           disable_defaults = false,
           view = {
+            -- q で閉じられるようにする。
+            -- ビューアーでは「見て、違ったら戻る」が頻繁に起きるので、
+            -- 1キーで抜けられないと体験が悪い。
+            -- 注意1: options.lua の閲覧専用フックが通常バッファの q を
+            --        潰しているため、ここで明示的に張り直す必要がある。
+            -- 注意2: actions.close は文脈依存で、ファイル一覧の上では
+            --        「パネルだけ閉じる」になる。差分ごと閉じたいので
+            --        コマンドを直接呼ぶ。
+            { "n", "q", "<cmd>DiffviewClose<CR>", { desc = "差分を閉じて戻る" } },
             { "n", "<leader>co", false },
             { "n", "<leader>ct", false },
             { "n", "<leader>cb", false },
@@ -52,6 +61,7 @@ return {
             { "n", "<leader>e",  actions.toggle_files,      { desc = "ファイル一覧の表示切替" } },
           },
           file_panel = {
+            { "n", "q", "<cmd>DiffviewClose<CR>", { desc = "差分を閉じて戻る" } },
             { "n", "<leader>cO", false },
             { "n", "<leader>cT", false },
             { "n", "<leader>cB", false },
