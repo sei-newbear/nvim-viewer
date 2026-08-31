@@ -83,6 +83,18 @@ local ITEMS = {
   { label = "ブラウザ", key = "␣o", prio = 90, when = is_md,
     run = function() require("custom.md_preview").open() end },
 
+  -- 行ごとの由来。モード中はラベルを変えて「押すと終わる」ことを示す
+  { label = function()
+      local ok, b = pcall(require, "custom.blame")
+      return (ok and b.is_on(ctx_buf())) and "blame終了" or "blame"
+    end,
+    key = "␣g", prio = 45,
+    when = function()
+      local buf = ctx_buf()
+      return vim.bo[buf].buftype == "" and vim.api.nvim_buf_get_name(buf) ~= ""
+    end,
+    run = function() require("custom.blame").toggle(ctx_buf()) end },
+
   -- 今のウィンドウの見え方
   { label = "折り返し", key = "␣w", prio = 40,
     run = function() require("custom.view_opts").toggle_wrap() end },

@@ -85,6 +85,17 @@ local function actions()
       key = "Space o", cond = is_md,
       run = function() require("custom.md_preview").open() end },
 
+    -- ---- 由来を追う ----
+    { name = "ブレイムモード（行ごとの由来を表示）", en = "blame git annotate who changed line author",
+      key = "Space g",
+      run = function() require("custom.blame").toggle() end },
+    { name = "この行を変えたコミットの差分を開く", en = "open commit diff for this line blame",
+      key = "Enter（モード中）",
+      run = function() require("custom.blame").open_commit() end },
+    { name = "ブレイム表示の密度を切替（変わり目だけ ⇄ 全行）",
+      en = "blame density toggle all lines changes only", key = "",
+      run = function() require("custom.blame").toggle_density() end },
+
     -- ---- 表示 ----
     { name = "折り返しの切替（横長の行を折り返す）", en = "toggle word wrap long lines", key = "Space w",
       run = function() require("custom.view_opts").toggle_wrap() end },

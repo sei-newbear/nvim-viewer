@@ -54,3 +54,4 @@ require("custom.winbar")     -- コード上端のパンくず（ファイルパ
 require("custom.statusline") -- 下部のジャンプメニュー（LSPがあるときだけ）
 require("custom.reset")      -- 開きすぎた画面を最初の状態へ戻す
 require("custom.open_guard") -- 差分ウィンドウを別ファイルで乗っ取らせない
+require("custom.blame")      -- 行ごとの由来（Space g）
