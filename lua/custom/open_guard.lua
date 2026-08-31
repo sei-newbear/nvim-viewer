@@ -16,6 +16,15 @@
 -- `Snacks.picker.actions.jump` を通るので、そこを1か所だけ包む。
 -- 差分ウィンドウが選ばれそうなら、差分でないタブの窓に差し替える。
 -- （nvim_set_current_win は他タブの窓でもタブごと切り替えてくれる）
+--
+-- ただし「1か所包めば足りる」は成り立たない。snacks は読み込み時に
+--   M.confirm = M.jump   -- 既定の確定動作
+--   M.edit    = M.jump
+-- と **関数の実体をコピー**しており（picker/actions.lua）、後から M.jump を
+-- 差し替えても confirm/edit は元の関数を指したままになる。
+-- Enter は confirm に割り当たっているので、包み直さないと
+-- ファイル検索・最近のファイル・LSPジャンプが全て素通りする。
+-- （ファイルツリーだけは explorer が実行時にテーブルを引くので効いていた）
 -- ===================================================================
 
 local M = {}
@@ -77,6 +86,13 @@ function M.setup()
     pcall(ensure_safe, picker)
     return orig(picker, item, action)
   end
+
+  -- 読み込み時に jump の実体をコピーした別名を、包んだ方へ張り直す。
+  -- 元が jump と同一のものだけを対象にする（独自実装は壊さない）。
+  for _, name in ipairs({ "confirm", "edit" }) do
+    if A[name] == orig then A[name] = A.jump end
+  end
+
   A.__viewer_guarded = true
   return true
 end

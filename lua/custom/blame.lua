@@ -100,14 +100,21 @@ end
 
 --- そのバッファを表示している窓の、本文に使える幅を返す
 --- 行番号やサイン列の分（textoff）を差し引く
+--- 同じバッファを複数の窓で開いている場合は**いちばん狭い窓**に合わせる。
+--- extmark はバッファに付くので窓ごとに変えられない。広い方に合わせると
+--- 狭い窓ではみ出して読めなくなるため、収まる側を採る。
 local function text_width(buf)
+  local best = nil
   for _, w in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_get_buf(w) == buf then
       local info = vim.fn.getwininfo(w)[1]
-      if info then return info.width - (info.textoff or 0) end
+      if info then
+        local usable = info.width - (info.textoff or 0)
+        if not best or usable < best then best = usable end
+      end
     end
   end
-  return vim.o.columns
+  return best or vim.o.columns
 end
 
 local function render(buf)
@@ -128,7 +135,11 @@ local function render(buf)
     end
     if show then
       local line = vim.api.nvim_buf_get_lines(buf, i - 1, i, false)[1] or ""
-      local code_w = vim.fn.strdisplaywidth(line)
+      -- NUL を含む行は Vim 側で Blob 扱いになり strdisplaywidth が E976 で落ちる。
+      -- 描画全体が止まると set_keymaps まで届かず「表示だけモード中」になるので、
+      -- ここで受け止めてバイト数で代用する。
+      local okw, code_w = pcall(vim.fn.strdisplaywidth, line)
+      if not okw then code_w = #line end
       -- コードの幅 + 2桁の余白 を空けた残りに収める
       local room = avail_total - code_w - 2
       local txt = room >= 10 and label(st.commits[sha], room) or nil
@@ -155,10 +166,12 @@ end
 --- 差分を開いている間の文脈。
 --- 「開いた状態のまま前のコミットへ」を実現するために、
 --- そのファイルを触ったコミットの並びと現在位置を覚えておく。
-local nav = nil       -- { file, rel, dir, commits = {sha...}, idx, origin_buf }
+local nav = nil       -- { file, rel, dir, root, commits, paths, idx, tabpage }
 local switching = false -- 自分で開き直している最中か
 
 --- git ルートからの相対パスを求める
+--- ルート自体も返す。DiffviewOpen にどのリポジトリの話かを明示するのに要る。
+---@return string rel, string dir, string? root
 local function rel_path(file)
   local dir = vim.fn.fnamemodify(file, ":h")
   local r = vim.system({ "git", "-C", dir, "rev-parse", "--show-toplevel" },
@@ -166,25 +179,37 @@ local function rel_path(file)
   if r.code == 0 and r.stdout then
     local top = vim.trim(r.stdout)
     if top ~= "" and file:sub(1, #top + 1) == top .. "/" then
-      return file:sub(#top + 2), dir
+      return file:sub(#top + 2), dir, top
     end
   end
-  return file, dir
+  return file, dir, nil
 end
 
 --- そのファイルを触ったコミットを新しい順に取る
+---
+--- `--follow` でリネームを追う。追わないとリネーム前のコミットが一覧から
+--- 落ち、「何番目か」の探索が外れて位置表示まで狂う。
+--- 追うとコミットごとにパスが変わるので、その時点のパスも一緒に返す
+--- （昔のコミットを今の名前で開こうとしても空になるため）。
+---
 --- 注意: パスは**絶対パス**で渡すこと。
 --- -C にファイルのディレクトリを、パスに git ルートからの相対を渡すと
 --- 基準がずれて一致せず、結果が空になる。
+---@return string[] shas, table<string,string> paths
 local function file_commits(dir, abs_file)
-  local r = vim.system({ "git", "-C", dir, "log", "--format=%H", "--", abs_file },
-    { text = true }):wait()
-  if r.code ~= 0 then return {} end
-  local out = {}
-  for _, l in ipairs(vim.split(vim.trim(r.stdout or ""), "\n")) do
-    if l ~= "" then table.insert(out, l) end
+  local r = vim.system({ "git", "-C", dir, "log", "--follow",
+    "--format=%H", "--name-only", "--", abs_file }, { text = true }):wait()
+  if r.code ~= 0 then return {}, {} end
+  local shas, paths, cur = {}, {}, nil
+  for _, l in ipairs(vim.split(r.stdout or "", "\n")) do
+    if #l == 40 and l:match("^%x+$") then
+      cur = l
+      table.insert(shas, l)
+    elseif cur and l ~= "" and not paths[cur] then
+      paths[cur] = l -- そのコミット時点でのパス
+    end
   end
-  return out
+  return shas, paths
 end
 
 --- 指定のコミットの差分を、そのファイルだけ開く
@@ -197,7 +222,18 @@ local function show(sha, summary, pos)
   switching = true
   local ok, lib = pcall(require, "diffview.lib")
   if ok and lib.views and #lib.views > 0 then pcall(vim.cmd, "DiffviewClose") end
-  vim.cmd(("DiffviewOpen %s^! -- %s"):format(sha, vim.fn.fnameescape(nav.rel)))
+  -- リポジトリを -C で明示する。DiffviewOpen の相対パスは **nvim の cwd**
+  -- 基準で解決されるので、リポジトリの下位ディレクトリから nvim を起動して
+  -- いるだけで一致せず、エラーも出ないまま空の差分が開く。
+  -- パスはそのコミット時点のもの（リネーム前は昔の名前）を使う。
+  local path = nav.paths[sha] or nav.rel
+  local cmd = "DiffviewOpen "
+  if nav.root then cmd = cmd .. "-C" .. vim.fn.fnameescape(nav.root) .. " " end
+  vim.cmd(cmd .. ("%s^! -- %s"):format(sha, vim.fn.fnameescape(path)))
+
+  -- どのタブで開いたかを覚える。無関係な差分を「ブレイムの差分」と
+  -- 取り違えないための目印にする。
+  nav.tabpage = vim.api.nvim_get_current_tabpage()
 
   -- 1ファイルしか見ていないので、左のファイル一覧は場所の無駄。
   -- 隠すと差分が全幅に広がって読みやすくなる。
@@ -223,6 +259,16 @@ function M.nav_state()
     nav = nil
     return nil
   end
+  -- 開いていた差分タブが無くなったなら、この文脈はもう死んでいる。
+  if not (nav.tabpage and vim.api.nvim_tabpage_is_valid(nav.tabpage)) then
+    nav = nil
+    return nil
+  end
+  -- 別のタブに居る間は出さない。
+  -- `Space dd` の作業ツリー差分や、`gf` で戻った通常ファイルの上でまで
+  -- 「◀ 前の変更」が出ると、押した瞬間に無関係な差分が入れ替わる。
+  -- nav は捨てない（差分タブへ戻れば続きから使える）。
+  if vim.api.nvim_get_current_tabpage() ~= nav.tabpage then return nil end
   return { idx = nav.idx, total = #nav.commits }
 end
 
@@ -271,13 +317,22 @@ function M.open_commit()
   -- 知りたいのは「この行がなぜこうなったか」であって、
   -- 同じコミットの他ファイルまでは要らない。
   local file = vim.api.nvim_buf_get_name(buf)
-  local rel, dir = rel_path(file)
-  local commits = file_commits(dir, file)
+  local rel, dir, root = rel_path(file)
+  local commits, paths = file_commits(dir, file)
 
   -- 何番目のコミットかを覚えておき、[h / ]h で前後に動けるようにする
-  local idx = 1
+  local idx = nil
   for i, h in ipairs(commits) do if h == sha then idx = i break end end
-  nav = { file = file, rel = rel, dir = dir, commits = commits, idx = idx, origin_buf = buf }
+  if not idx then
+    -- 履歴に見つからないコミット。黙って 1 番目として扱うと、
+    -- 位置表示も [h / ]h の行き先も全部ずれる。
+    vim.notify(("%s はこのファイルの履歴に見つかりません（前後移動は使えません）")
+      :format(sha:sub(1, 7)), vim.log.levels.WARN)
+    idx = 1
+    commits, paths = { sha }, { [sha] = rel }
+  end
+  nav = { file = file, rel = rel, dir = dir, root = root,
+    commits = commits, paths = paths, idx = idx }
 
   show(sha, c and c.summary or "", ("%d/%d"):format(idx, #commits))
 end
@@ -301,25 +356,49 @@ end
 function M.off(buf)
   buf = buf or vim.api.nvim_get_current_buf()
   if not state[buf] then return false end
-  vim.api.nvim_buf_clear_namespace(buf, NS, 0, -1)
-  set_keymaps(buf, false)
   state[buf] = nil
+  -- 既に消えたバッファに対しても呼ばれる（BufUnload 経由）
+  if vim.api.nvim_buf_is_valid(buf) then
+    vim.api.nvim_buf_clear_namespace(buf, NS, 0, -1)
+    set_keymaps(buf, false)
+  end
   return true
 end
 
-function M.on(buf)
+---@param opts? { quiet?: boolean } quiet: 取り直しなので通知しない
+function M.on(buf, opts)
   buf = buf or vim.api.nvim_get_current_buf()
+  local quiet = opts and opts.quiet
+  local function say(msg, lvl)
+    if not quiet then vim.notify(msg, lvl) end
+  end
+
   local file = vim.api.nvim_buf_get_name(buf)
   if file == "" or vim.bo[buf].buftype ~= "" then
-    vim.notify("通常のファイルで使ってください", vim.log.levels.WARN)
+    say("通常のファイルで使ってください", vim.log.levels.WARN)
     return
+  end
+
+  -- バイナリは blame しても読めない。加えて NUL を含む行が描画に回ると
+  -- 途中で落ちて「注釈もキーマップも無いのにモード中」という状態になる。
+  for _, l in ipairs(vim.api.nvim_buf_get_lines(buf, 0, 200, false)) do
+    if l:find("\0", 1, true) then
+      say("バイナリファイルでは使えません", vim.log.levels.WARN)
+      return
+    end
   end
 
   local dir = vim.fn.fnamemodify(file, ":h")
   vim.system({ "git", "-C", dir, "blame", "--porcelain", "--", file }, { text = true },
     vim.schedule_wrap(function(res)
-      if res.code ~= 0 or not res.stdout or res.stdout == "" then
-        vim.notify("blame を取得できません（git 管理下のファイルですか）", vim.log.levels.WARN)
+      if res.code ~= 0 then
+        say("blame を取得できません（git 管理下のファイルですか）", vim.log.levels.WARN)
+        return
+      end
+      if not res.stdout or res.stdout == "" then
+        -- 追跡済みの空ファイルは exit 0 かつ出力 0 バイトになる。
+        -- git 管理外と同じ文言を出すと原因を誤らせる。
+        say("このファイルは空です", vim.log.levels.INFO)
         return
       end
       if not vim.api.nvim_buf_is_valid(buf) then return end
@@ -329,7 +408,7 @@ function M.on(buf)
       set_keymaps(buf, true)
       local n = 0
       for _ in pairs(commits) do n = n + 1 end
-      vim.notify(("ブレイムモード: %d コミット / Enter でそのコミットの差分"):format(n),
+      say(("ブレイムモード: %d コミット / Enter でそのコミットの差分"):format(n),
         vim.log.levels.INFO)
     end))
 end
@@ -373,10 +452,31 @@ end
 
 local group = vim.api.nvim_create_augroup("ViewerBlame", { clear = true })
 
--- バッファを閉じたら状態を捨てる
-vim.api.nvim_create_autocmd({ "BufDelete", "BufUnload" }, {
+-- バッファを閉じたら片付ける（注釈とキーマップも含めて）
+vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
   group = group,
-  callback = function(ev) state[ev.buf] = nil end,
+  callback = function(ev) M.off(ev.buf) end,
+})
+
+-- BufUnload は「閉じた」とは限らない。
+-- 差分からの `gf` や `:edit!` でも飛ぶ。ここで状態だけ捨てると、
+-- 注釈は画面に残ったまま Enter だけが「モードではありません」と言う
+-- 辻褄の合わない状態になる。
+-- 実際に消えたのかを次のループで見て、残っているなら取り直す
+-- （読み込み直しで中身が変わっている可能性があるため）。
+vim.api.nvim_create_autocmd("BufUnload", {
+  group = group,
+  callback = function(ev)
+    local buf = ev.buf
+    if not state[buf] then return end
+    vim.schedule(function()
+      if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) then
+        M.on(buf, { quiet = true })
+      else
+        M.off(buf)
+      end
+    end)
+  end,
 })
 
 -- 幅が変わると収まり方が変わるので描き直す
