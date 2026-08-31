@@ -13,7 +13,11 @@ ls -la ~/.config/nvim
 ### A. 何も入っていない場合
 
 ```bash
+# SSH 鍵を GitHub に登録している場合
 git clone git@github.com:sei-newbear/nvim-viewer.git ~/.config/nvim
+# していない場合
+git clone https://github.com/sei-newbear/nvim-viewer.git ~/.config/nvim
+
 ~/.config/nvim/scripts/bootstrap.sh
 nvim
 ```
@@ -34,7 +38,7 @@ nvim
 **`NVIM_APPNAME` で並べて入れる。** 設定もプラグインも完全に分かれる。
 
 ```bash
-git clone git@github.com:sei-newbear/nvim-viewer.git ~/.config/viewer
+git clone https://github.com/sei-newbear/nvim-viewer.git ~/.config/viewer
 NVIM_APPNAME=viewer ~/.config/viewer/scripts/bootstrap.sh
 nvim-viewer          # bootstrap.sh がこの起動コマンドを用意する
 ```
@@ -46,10 +50,25 @@ nvim-viewer          # bootstrap.sh がこの起動コマンドを用意する
 
 ---
 
-`bootstrap.sh` は **sudo を使わず**、依存（Neovim・tree-sitter CLI・言語サーバ・
-mermaid 関連）を導入し、Chrome のパスを検出して `mermaid-puppeteer.json` を生成し、
-パーサーを入れて、最後に動作確認まで走らせる。**何度実行しても壊れない。**
+`bootstrap.sh` は **sudo を使わず**依存を導入し、パーサーを入れ、最後に動作確認まで走らせる。
+何度実行しても壊れず、既に入っているものは飛ばす。
 `~/.config/nvim` を symlink にして実体を別の場所に置く構成にも対応している。
+
+### bootstrap.sh が変更するもの
+
+**このスクリプトはグローバルな環境に手を入れる。** 実行前に把握しておくこと。
+
+| 対象 | 何をするか | 条件 |
+|---|---|---|
+| **mise のグローバル設定** | `mise use -g neovim@latest`。**そのマシン全体の Neovim が変わる** | Neovim が無い、または 0.11 未満のときだけ |
+| npm グローバル | `tree-sitter-cli` / `@vtsls/language-server` / `typescript` / `vscode-langservers-extracted` / `@mermaid-js/mermaid-cli` / `marked` を導入 | それぞれ未導入のときだけ |
+| `$GOBIN` | `go install gopls@latest` | go があり gopls が無いときだけ |
+| `~/.local/share/nvim-md-preview/` | `marked.umd.js` と `mermaid.min.js` を複製 | 常に |
+| `~/.local/bin/nvim-<名前>` | 起動用ラッパーを作成 | `NVIM_APPNAME` を使ったときだけ。**既存の別ファイルは上書きしない** |
+| リポジトリ直下 | `mermaid-puppeteer.json` を生成（git 管理外） | ブラウザが見つかったとき |
+
+**0.9 系など古い Neovim で安定させているマシンでは、`mise use -g` に注意。**
+本業の Neovim まで変わる。避けたい場合は先に 0.11 以上を用意しておけば、この処理は走らない。
 
 ### このリポジトリについて
 
@@ -58,6 +77,7 @@ mermaid 関連）を導入し、Chrome のパスを検出して `mermaid-puppete
 - `docs/design-notes.md` — **なぜそう作ったか / 触ると何が壊れるか。**
   設定を変える前に読む。設定ファイルの中身は載せていない（このリポジトリが正）
 - `docs/todo.md` — 残っている作業
+- `LICENSE` — MIT
 - `lazy-lock.json` — **コミットに含める。** プラグインの版を固定し、
   どのマシンでも同じ状態になる。勝手な更新も起きない
 - `mermaid-puppeteer.json` — **管理しない。** Chrome の場所が環境で違うため
@@ -110,7 +130,6 @@ nvim <ファイル or ディレクトリ>
 | **`Space 0`** | **全部閉じて最初の状態に戻す** |
 | `Space o` | **マークダウンをブラウザで開く（mermaid を図で描画）** |
 | `Space m` | **整形表示 ⇄ 生ファイル** を切り替え |
-| `Space f` | yazi でファイル探索（全画面のファイルマネージャ） |
 | `Space y` | 現在位置 `path:line` をコピー |
 | `Space q` / `Space Q` | ウィンドウを閉じる / Neovim終了 |
 
@@ -508,7 +527,8 @@ VSCode は「.md を生で開く → プレビューを開く」なので、プ�
 herdr のペインは端末のピクセル寸法を `0 x 0` で報告する。
 Kitty graphics は画像の配置とサイズ計算にこれを必要とするため、
 **herdr の中では原理的にインライン画像が成立しない**（`kitty_graphics = true` にしても変わらない）。
-yazi の画像プレビューが粗いブロックになるのも同じ理由で、chafa に落ちているため。
+（他のツール、例えば yazi の画像プレビューが粗いブロックになるのも同じ理由。
+chafa による近似表示に落ちている）
 
 確認方法:
 
@@ -521,7 +541,7 @@ print(struct.unpack('HHHH',b))"   # (rows, cols, xpixel, ypixel)
 ## 閲覧専用について
 
 実ファイルのバッファは `modifiable=false` / `readonly=true` になる。
-Diffview・yazi・lazy.nvim などの UI バッファは対象外（除外しないと壊れるため）。
+Diffview・lazy.nvim などの UI バッファは対象外（除外しないと壊れるため）。
 編集は左ペインのエージェントに依頼する運用。
 
 ## 対応している言語
@@ -605,3 +625,25 @@ ls ~/.local/share/nvim/lazy/nvim-lspconfig/lsp/ | grep '^<名前>\.lua$'
 
 注意: npm 製のサーバは mise の Node インストール先に入るため、
 mise で Node のメジャーバージョンを上げた場合は入れ直しが必要。
+
+---
+
+## ライセンス
+
+このリポジトリは **MIT**（`LICENSE`）。
+
+導入されるプラグインは**同梱しておらず**、`lazy.nvim` が利用者のマシンで
+各配布元から取得する。それぞれのライセンスは以下のとおり。
+
+| ライセンス | プラグイン |
+|---|---|
+| **GPL-3.0-or-later** | `diffview.nvim` |
+| Apache-2.0 | `lazy.nvim` / `nvim-lspconfig` / `nvim-treesitter` / `snacks.nvim` / `which-key.nvim` |
+| MIT | `nvim-web-devicons` / `plenary.nvim` / `render-markdown.nvim` |
+
+`bootstrap.sh` が npm から入れる `marked` / `mermaid` / `@mermaid-js/mermaid-cli` は
+いずれも MIT。これらも同梱しておらず、利用者のマシンで取得する。
+
+**`diffview.nvim` が GPL である点に注意。** この設定はそのコードを一行も含まず、
+利用者が自分で取得するため、この設定自体のライセンスには影響しない。
+ただし導入すると自分の環境に GPL のコードが入ることは認識しておくこと。

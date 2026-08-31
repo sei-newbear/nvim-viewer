@@ -204,7 +204,9 @@ vim.api.nvim_create_autocmd("FileType", {
   end,
 })
 
-vim.api.nvim_create_user_command("MarkdownBrowser", M.open,
+-- 注意: コマンドのコールバックには引数テーブルが渡される。
+-- buf を取る関数をそのまま登録すると、buf にテーブルが入って落ちる。
+vim.api.nvim_create_user_command("MarkdownBrowser", function() M.open() end,
   { desc = "マークダウンをブラウザで開く" })
 
 return M

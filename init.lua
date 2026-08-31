@@ -36,7 +36,7 @@ require("custom.herdr_link")
 -- `?` で開くキー操作早見表
 require("custom.cheatsheet")
 
--- マークダウンのブラウザプレビュー（Space p）
+-- マークダウンのブラウザプレビュー（Space o）
 require("custom.md_preview")
 
 -- frontmatter を「メタデータ」として明示する

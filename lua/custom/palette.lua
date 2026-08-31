@@ -12,6 +12,25 @@
 
 local M = {}
 
+--- キーを実際に送る
+---
+--- `vim.cmd("normal! \\<C-o>")` は動かない。Lua の文字列としては
+--- バックスラッシュと `<C-o>` という文字の並びでしかなく、
+--- `:normal` は `\<...>` を展開しないため、無言で何も起きない。
+--- **エラーも出ないので一番気づきにくい壊れ方をする。**
+--- 端末コードへ変換してから渡す。
+---@param keys string 例 "<C-o>"
+---@param raw boolean true なら normal!（マッピングを無視）
+function M.feed(keys, raw)
+  local codes = vim.api.nvim_replace_termcodes(keys, true, false, true)
+  if raw then
+    vim.cmd("normal! " .. codes)
+  else
+    -- マッピングを経由させたい場合（Space y のような自前のキー）
+    vim.api.nvim_feedkeys(codes, "m", false)
+  end
+end
+
 --- パレットに並べる操作
 --- name: 表示名 / en: 英語での検索語 / key: 対応するキー / run: 実行内容
 --- cond: 省略可。false なら一覧に出さない
@@ -75,7 +94,8 @@ local function actions()
     { name = "プロジェクト全体から名前で探す", en = "workspace symbol search", key = "Space S", cond = has_lsp,
       run = function() require("snacks").picker.lsp_workspace_symbols() end },
     { name = "元の位置へ戻る", en = "go back jump previous location", key = "Ctrl+o",
-      run = function() vim.cmd("normal! \\<C-o>") end },
+      -- `:normal!` は `\<...>` を展開しない。文字列のまま渡すと無言で不発になる。
+      run = function() require("custom.palette").feed("<C-o>", true) end },
 
     -- ---- マークダウン ----
     { name = "整形表示 ⇄ 生ファイル を切り替え", en = "toggle markdown rendered raw source preview",
@@ -116,7 +136,7 @@ local function actions()
     { name = "送信先のエージェントを確認する", en = "check agent target herdr", key = "",
       run = function() vim.cmd("HerdrTarget") end },
     { name = "現在位置を パス:行番号 でコピー", en = "copy file path line number", key = "Space y",
-      run = function() vim.cmd("normal \\<Space>y") end },
+      run = function() require("custom.palette").feed("<Space>y", false) end },
 
     -- ---- 片付け ----
     { name = "全部閉じて最初の状態に戻す", en = "reset close all cleanup restore layout", key = "Space 0",

@@ -1,7 +1,7 @@
 -- ===================================================================
 -- lua/plugins/snacks.lua
 -- ファイルツリー(explorer) と 各種ピッカー(picker)
--- yazi.nvim の依存として既に入っているものを活用し、プラグインを増やさない
+-- ツリー・ピッカー・通知を1つのプラグインでまかない、数を増やさない
 -- ===================================================================
 
 --- ファイルツリーの表示/非表示を切り替える
@@ -99,7 +99,9 @@ return {
               "-b", "transparent",
               "-t", theme,
               "-s", "4",
-              "-p", vim.fn.expand("~/.config/nvim/mermaid-puppeteer.json"),
+              -- NVIM_APPNAME で別名導入されると ~/.config/nvim には無い。
+              -- 実際に読まれている設定ディレクトリを使う。
+              "-p", vim.fn.stdpath("config") .. "/mermaid-puppeteer.json",
             }
           end,
         },

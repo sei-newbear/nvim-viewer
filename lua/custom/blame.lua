@@ -506,7 +506,10 @@ vim.api.nvim_create_autocmd("User", {
 vim.keymap.set("n", "<leader>g", M.toggle,
   { silent = true, desc = "ブレイムモードの切替（行ごとの由来）" })
 
-vim.api.nvim_create_user_command("Blame", M.toggle, { desc = "ブレイムモードの切替" })
+-- 注意: コマンドのコールバックには引数テーブルが渡される。
+-- buf を取る関数をそのまま登録すると、buf にテーブルが入って落ちる。
+vim.api.nvim_create_user_command("Blame", function() M.toggle() end,
+  { desc = "ブレイムモードの切替" })
 vim.api.nvim_create_user_command("BlameDensity", M.toggle_density,
   { desc = "ブレイム表示の密度を切替（変わり目だけ ⇄ 全行）" })
 
