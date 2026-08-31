@@ -22,22 +22,28 @@ function M.is_rendered(buf)
 end
 
 --- 整形表示 ⇄ 生ファイル を切り替える
+---
+--- 対象バッファは必ず引数で受ける。
+--- render-markdown の `api.buf_enable/buf_disable` は buf を取らず
+--- **常に現在バッファ**へ作用するため、フッターのボタンのように
+--- 「別のバッファを指しながら押す」経路では、記録した状態と実際が食い違う。
+--- buf を取れる `core.manager.set_buf` を直接呼ぶ。
 ---@return boolean 切り替えた後、整形表示なら true
 function M.toggle(buf)
   buf = buf or vim.api.nvim_get_current_buf()
+
+  -- 対象外のバッファでは何も起きない（set_buf は無言の no-op）。
+  -- 記録だけ書き換えると、以後ラベルと実際がずれ続ける。
+  local mok, mgr = pcall(require, "render-markdown.core.manager")
+  if not (mok and mgr.attached and mgr.attached(buf)) then
+    vim.notify("このバッファは整形表示の対象ではありません", vim.log.levels.WARN)
+    return M.is_rendered(buf)
+  end
+
   local to_rendered = not M.is_rendered(buf)
   rendered[buf] = to_rendered
 
-  local ok = pcall(function()
-    if to_rendered then
-      require("render-markdown.api").buf_enable()
-    else
-      require("render-markdown.api").buf_disable()
-    end
-  end)
-  if not ok then
-    pcall(function() require("render-markdown").buf_toggle() end)
-  end
+  pcall(mgr.set_buf, buf, to_rendered)
 
   -- frontmatter の装飾も一緒に付け外しする。
   -- 片方だけ残ると「生ファイル」にならない。

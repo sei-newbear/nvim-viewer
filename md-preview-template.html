@@ -2,6 +2,30 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
+<!--
+  マークダウンの本文は marked が HTML にして innerHTML へ入れる。
+  つまり「開いたファイルに書かれていた生 HTML」がそのまま DOM になる。
+  <script> 要素は innerHTML では動かないが、onerror / onload のような
+  イベント属性や javascript: リンクは動いてしまう。
+  レビュー対象のリポジトリや、エージェントが拾ってきた SKILL.md を
+  開くビューアーなので、そこは塞いでおく。
+
+  script-src に 'unsafe-inline' を入れないのが要点。
+  ページ自身のスクリプトは nonce で通し、本文由来のイベント属性は
+  nonce を付けようがないので実行されない。
+  connect-src / img-src を絞って、外へ送る経路も断つ。
+-->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  script-src 'nonce-__NONCE__' file:;
+  style-src 'unsafe-inline' file:;
+  img-src file: data:;
+  font-src file: data:;
+  connect-src 'none';
+  frame-src 'none';
+  object-src 'none';
+  form-action 'none';
+">
 <title>__TITLE__</title>
 <base href="__BASE__">
 <style>
@@ -28,6 +52,9 @@
     }
   }
   * { box-sizing: border-box; }
+  /* 狭いペインから開く前提なので、横スクロールは特に邪魔になる。
+     長いURLや frontmatter の長い値でも本文側で折り返す。 */
+  body { overflow-wrap: anywhere; }
   body {
     background: var(--bg);
     color: var(--fg);
@@ -124,10 +151,10 @@
 <main><div id="metadata"></div><div id="content"></div></main>
 <footer>__FOOTER__</footer>
 
-<script id="md-source" type="application/octet-stream">__MD_B64__</script>
-<script src="__LIB__/marked.umd.js"></script>
-<script src="__LIB__/mermaid.min.js"></script>
-<script>
+<script id="md-source" type="application/octet-stream" nonce="__NONCE__">__MD_B64__</script>
+<script nonce="__NONCE__" src="__LIB__/marked.umd.js"></script>
+<script nonce="__NONCE__" src="__LIB__/mermaid.min.js"></script>
+<script nonce="__NONCE__">
 (function () {
   // base64 -> UTF-8 文字列（日本語を壊さないため TextDecoder を使う）
   var b64 = document.getElementById('md-source').textContent.trim();
@@ -142,11 +169,16 @@
 
   // --- frontmatter を本文から切り離し、メタデータのカードとして描く ---
   // marked に渡すと `---` が区切り線になって意味が失われるため、先に取り出す。
+  // 走査の上限はターミナル側（custom/frontmatter.lua の MAX_SCAN）と揃える。
+  // 揃えないと、同じファイルが「ターミナルでは本文・ブラウザではメタデータ」
+  // という食い違った見え方になる。
+  var MAX_SCAN = 200;
   function splitFrontmatter(text) {
     var lines = text.split(/\r?\n/);
     var delim = lines[0];
     if (delim !== '---' && delim !== '+++') return { meta: null, body: text };
-    for (var i = 1; i < lines.length; i++) {
+    var limit = Math.min(lines.length, MAX_SCAN);
+    for (var i = 1; i < limit; i++) {
       if (lines[i] === delim) {
         return { meta: lines.slice(1, i).join('\n'), body: lines.slice(i + 1).join('\n') };
       }
@@ -156,7 +188,8 @@
 
   var split = splitFrontmatter(md);
 
-  if (split.meta !== null) {
+  // 中身の無い frontmatter（`---` が2行続くだけ）で空の箱を出さない
+  if (split.meta !== null && split.meta.trim() !== '') {
     var dl = '';
     var pending = null;
     split.meta.split(/\r?\n/).forEach(function (line) {
@@ -206,20 +239,32 @@
   mermaid.initialize({
     startOnLoad: false,
     theme: dark ? 'dark' : 'default',
-    securityLevel: 'loose',
+    // 本文は信用しない前提なので、mermaid 側でも緩めない
+    securityLevel: 'strict',
   });
 
-  mermaid.run({ querySelector: '.mermaid' }).catch(function (e) {
-    // 図の記述に誤りがあっても、本文まで巻き添えにしない
-    document.querySelectorAll('.mermaid').forEach(function (el) {
-      if (!el.querySelector('svg')) {
+  // 描く前に1つずつ構文を確かめる。
+  // mermaid.run に任せると、壊れた図の場所に mermaid 自身が
+  // エラーSVG（爆弾の絵）を描いてしまい、
+  //   - どの図が壊れたのか
+  //   - 元の記述がどうだったか
+  // が画面から消える。先に弾けば、そのブロックだけ元ソース付きで出せる。
+  var blocks = Array.prototype.slice.call(document.querySelectorAll('.mermaid'));
+  Promise.all(blocks.map(function (el) {
+    var src = el.textContent;
+    return Promise.resolve()
+      .then(function () { return mermaid.parse(src); })
+      .catch(function (e) {
         var box = document.createElement('div');
         box.className = 'mermaid-error';
-        box.textContent = 'mermaid の描画に失敗しました:\n' + el.textContent;
+        box.textContent = 'mermaid の記述に誤りがあります: '
+          + ((e && e.message) ? e.message : String(e)) + '\n\n' + src;
         el.replaceWith(box);
-      }
-    });
-  });
+      });
+  })).then(function () {
+    // 残ったものだけ描く。ここで落ちても本文は巻き添えにしない。
+    return mermaid.run({ querySelector: '.mermaid' });
+  }).catch(function () {});
 })();
 </script>
 </body>

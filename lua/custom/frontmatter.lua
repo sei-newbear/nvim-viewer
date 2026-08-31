@@ -11,7 +11,7 @@
 local M = {}
 
 local NS = vim.api.nvim_create_namespace("viewer_frontmatter")
-local MAX_SCAN = 200 -- frontmatter を探す最大行数
+local MAX_SCAN = 200 -- frontmatter を探す最大行数（md-preview-template.html と揃えること）
 
 --- 表示中かどうかをバッファごとに覚える（Space m の切替と連動させる）
 local enabled = {}

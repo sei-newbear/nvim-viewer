@@ -95,10 +95,45 @@ local function opener()
   return nil
 end
 
---- 現在のバッファをHTMLにしてブラウザで開く
-function M.open()
-  if vim.bo.filetype ~= "markdown" then
-    vim.notify("マークダウンファイルではありません（filetype=" .. vim.bo.filetype .. "）",
+--- HTML に流し込む値を安全にする
+--- テンプレートは属性値の中にも埋めるので、引用符まで潰しておく
+local function esc_html(t)
+  return (tostring(t)
+    :gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+    :gsub('"', "&quot;"):gsub("'", "&#39;"))
+end
+
+--- 読み出しを許すのは本人だけにする（中身がそのまま埋まっているため）
+local function protect(path)
+  pcall(vim.uv.fs_chmod, path, tonumber("600", 8))
+end
+
+--- 古いプレビューを片付ける
+--- ファイル名は絶対パスのハッシュで決まるので放っておくと溜まり続け、
+--- しかも中身（マークダウン全文）が base64 で埋まったまま残る。
+local function sweep()
+  local dir = vim.fn.stdpath("cache")
+  local cutoff = os.time() - 7 * 86400
+  local ok, iter = pcall(vim.fs.dir, dir)
+  if not ok then return end
+  for name, t in iter do
+    if t == "file" and name:match("^nvim%-md%-preview%-%x+%.html$") then
+      local path = dir .. "/" .. name
+      local st = vim.uv.fs_stat(path)
+      if st and st.mtime and st.mtime.sec < cutoff then
+        pcall(vim.uv.fs_unlink, path)
+      end
+    end
+  end
+end
+
+--- バッファをHTMLにしてブラウザで開く
+--- 対象は引数で受ける。フッターのボタンは「裏のマークダウン」を
+--- 指しながら押されるので、現在バッファを見ると必ず外れる。
+function M.open(buf)
+  buf = buf or vim.api.nvim_get_current_buf()
+  if vim.bo[buf].filetype ~= "markdown" then
+    vim.notify("マークダウンファイルではありません（filetype=" .. vim.bo[buf].filetype .. "）",
       vim.log.levels.WARN)
     return
   end
@@ -116,27 +151,39 @@ function M.open()
   end
 
   -- 保存されていない変更も含めて、今バッファに見えている内容を出す
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   local md = table.concat(lines, "\n")
 
-  local abs = vim.api.nvim_buf_get_name(0)
+  local abs = vim.api.nvim_buf_get_name(buf)
   local dir = abs ~= "" and vim.fn.fnamemodify(abs, ":h") or vim.fn.getcwd()
   local name = abs ~= "" and vim.fn.fnamemodify(abs, ":t") or "[無題]"
 
   local template = table.concat(vim.fn.readfile(TEMPLATE), "\n")
 
-  -- 相対パスの画像リンクが解決できるよう base を元ファイルの場所にする
-  local html = template
-    :gsub("__TITLE__", vim.fn.escape(name, "%"))
-    :gsub("__BASE__", vim.fn.escape("file://" .. dir .. "/", "%"))
-    :gsub("__LIB__", vim.fn.escape("file://" .. LIB_DIR, "%"))
-    :gsub("__FOOTER__", vim.fn.escape(abs ~= "" and abs or "（保存されていないバッファ）", "%"))
-    :gsub("__MD_B64__", vim.base64.encode(md))
+  -- 穴埋めは**関数**で行う。
+  -- `gsub` の置換文字列では `%` がエスケープ文字として解釈されるため、
+  -- `100%done.md` のような名前で中身が壊れ、`pct%1abc.md` に至っては
+  -- プレースホルダ文字列がそのまま出力に漏れていた。
+  -- 関数の戻り値はパターン解釈されないので、この問題ごと消える。
+  -- 併せて HTML としての意味も潰しておく（ファイル名は属性値にも入る）。
+  local nonce = vim.fn.sha256(("%s|%s|%s"):format(abs, vim.uv.hrtime(), vim.uv.os_getpid())):sub(1, 32)
+  local vals = {
+    TITLE  = esc_html(name),
+    -- 相対パスの画像リンクが解決できるよう base を元ファイルの場所にする
+    BASE   = esc_html("file://" .. dir .. "/"),
+    LIB    = esc_html("file://" .. LIB_DIR),
+    FOOTER = esc_html(abs ~= "" and abs or "（保存されていないバッファ）"),
+    MD_B64 = vim.base64.encode(md),
+    NONCE  = nonce,
+  }
+  local html = template:gsub("__(%u[%u%d_]*)__", function(k) return vals[k] end)
 
   -- 同じファイルは同じ出力先に書く（タブが無限に増えないように）
-  local key = vim.fn.sha256(abs ~= "" and abs or tostring(vim.api.nvim_get_current_buf())):sub(1, 12)
+  local key = vim.fn.sha256(abs ~= "" and abs or tostring(buf)):sub(1, 12)
   local out = ("%s/nvim-md-preview-%s.html"):format(vim.fn.stdpath("cache"), key)
   vim.fn.writefile(vim.split(html, "\n"), out)
+  protect(out)
+  sweep()
 
   vim.system({ open_cmd, out }, { detach = true })
   vim.notify(("%s で開きました: %s"):format(vim.fn.fnamemodify(open_cmd, ":t"), name),
