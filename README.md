@@ -4,27 +4,28 @@ herdr の左ペインにエージェント、右ペインにこのビューア�
 
 ## 新しいマシンで使う
 
-**先に確認すること: そのマシンで既に nvim を使っているか。**
-
-```bash
-ls -la ~/.config/nvim
-```
-
-### A. 何も入っていない場合
-
 ```bash
 # SSH 鍵を GitHub に登録している場合
-git clone git@github.com:sei-newbear/nvim-viewer.git ~/.config/nvim
+git clone git@github.com:sei-newbear/nvim-viewer.git ~/.config/nvim-viewer
 # していない場合
-git clone https://github.com/sei-newbear/nvim-viewer.git ~/.config/nvim
+git clone https://github.com/sei-newbear/nvim-viewer.git ~/.config/nvim-viewer
 
-~/.config/nvim/scripts/bootstrap.sh
+NVIM_APPNAME=nvim-viewer ~/.config/nvim-viewer/scripts/bootstrap.sh
 nvim-viewer
 ```
 
-### B. 既に nvim を使っている場合（上書きしてはいけない）
+**既に nvim を使っているかどうかに関係なく、この手順ひとつでよい。**
+`~/.config/nvim` には触れないので、既存の設定があっても壊れないし、
+無い場合もそこを空けたままにする（後から普通の nvim を使いたくなったときのため）。
 
-**この設定は閲覧専用ビューアーなので、既存の設定に被せるとそのマシンで編集ができなくなる。**
+| | 設定 | プラグイン | 起動 |
+|---|---|---|---|
+| このビューアー | `~/.config/nvim-viewer` | `~/.local/share/nvim-viewer` | `nvim-viewer` |
+| 普通の nvim | `~/.config/nvim` | `~/.local/share/nvim` | `nvim` |
+
+### なぜ ~/.config/nvim に入れないのか
+
+**この設定は閲覧専用ビューアーで、そのままでは編集ができない。**
 
 | すること | 影響 |
 |---|---|
@@ -32,30 +33,15 @@ nvim-viewer
 | `:w` を握り潰す | 保存できなくなる |
 | `q` を `<Nop>` にする | マクロ記録が使えなくなる |
 | `grn` / `gra` / `grx` / `gcc` を削除する | リネーム・コードアクションが消える |
-| `lazy` が `lua/plugins/` を丸ごと import する | 相手のプラグイン定義まで読み込んで競合する |
+| `lazy` が `lua/plugins/` を丸ごと import する | 同居する他のプラグイン定義まで読み込んで競合する |
 
-`init.lua` も同名なので上書きされ、既存の設定は失われる。
-**`NVIM_APPNAME` で並べて入れる。** 設定もプラグインも完全に分かれる。
+`~/.config/nvim` に入れると、そのマシンの nvim が編集に使えなくなる。
+**編集は左ペインのエージェントに任せる**のがこの道具の前提だが、
+それを nvim 全体に強制する必要はない。
 
-```bash
-git clone https://github.com/sei-newbear/nvim-viewer.git ~/.config/nvim-viewer
-NVIM_APPNAME=nvim-viewer ~/.config/nvim-viewer/scripts/bootstrap.sh
-nvim-viewer
-```
-
-| | 設定 | プラグイン |
-|---|---|---|
-| `nvim`（従来どおり） | `~/.config/nvim` | `~/.local/share/nvim` |
-| `nvim-viewer` | `~/.config/nvim-viewer` | `~/.local/share/nvim-viewer` |
-
----
-
-**どちらで入れても起動は `nvim-viewer`。** `bootstrap.sh` が
-`~/.local/bin/nvim-viewer` を用意する。導入先によって呼び名が変わると、
-人に渡したときに「どちらで入れたか」を聞かないと案内できなくなるため。
-
-A で入れた場合は `nvim` でも同じものが立つ（`~/.config/nvim` がこの設定なので）。
-B で入れた場合の `nvim` は、今までの設定のまま。
+起動は `bootstrap.sh` が用意する `~/.local/bin/nvim-viewer` から行う
+（中身は `exec env NVIM_APPNAME="nvim-viewer" nvim "$@"` の1行）。
+`~/.local/bin` が PATH に無ければ警告が出る。
 
 ---
 
