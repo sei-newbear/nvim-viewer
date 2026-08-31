@@ -150,7 +150,79 @@ local function render(buf)
   end
 end
 
--- ---- コミットの差分を開く ----
+-- ---- コミットの差分を開く / 前後のコミットへ移動 ----
+
+--- 差分を開いている間の文脈。
+--- 「開いた状態のまま前のコミットへ」を実現するために、
+--- そのファイルを触ったコミットの並びと現在位置を覚えておく。
+local nav = nil       -- { file, rel, dir, commits = {sha...}, idx, origin_buf }
+local switching = false -- 自分で開き直している最中か
+
+--- git ルートからの相対パスを求める
+local function rel_path(file)
+  local dir = vim.fn.fnamemodify(file, ":h")
+  local r = vim.system({ "git", "-C", dir, "rev-parse", "--show-toplevel" },
+    { text = true }):wait()
+  if r.code == 0 and r.stdout then
+    local top = vim.trim(r.stdout)
+    if top ~= "" and file:sub(1, #top + 1) == top .. "/" then
+      return file:sub(#top + 2), dir
+    end
+  end
+  return file, dir
+end
+
+--- そのファイルを触ったコミットを新しい順に取る
+--- 注意: パスは**絶対パス**で渡すこと。
+--- -C にファイルのディレクトリを、パスに git ルートからの相対を渡すと
+--- 基準がずれて一致せず、結果が空になる。
+local function file_commits(dir, abs_file)
+  local r = vim.system({ "git", "-C", dir, "log", "--format=%H", "--", abs_file },
+    { text = true }):wait()
+  if r.code ~= 0 then return {} end
+  local out = {}
+  for _, l in ipairs(vim.split(vim.trim(r.stdout or ""), "\n")) do
+    if l ~= "" then table.insert(out, l) end
+  end
+  return out
+end
+
+--- 指定のコミットの差分を、そのファイルだけ開く
+local function show(sha, summary, pos)
+  vim.notify(("%s%s • %s\n（[h 前の変更 / ]h 次の変更 / q 戻る）"):format(
+    pos and (pos .. "  ") or "", sha:sub(1, 7), summary or ""), vim.log.levels.INFO)
+  -- 既に差分を開いていれば一度閉じる（タブが積み上がらないように）。
+  -- ただし閉じると DiffviewViewClosed が飛んで nav が捨てられてしまうので、
+  -- 切り替え中であることを立てておく。
+  switching = true
+  local ok, lib = pcall(require, "diffview.lib")
+  if ok and lib.views and #lib.views > 0 then pcall(vim.cmd, "DiffviewClose") end
+  vim.cmd(("DiffviewOpen %s^! -- %s"):format(sha, vim.fn.fnameescape(nav.rel)))
+  vim.schedule(function() switching = false end)
+end
+
+--- 前後のコミットへ移動する（差分を開いたまま）
+--- delta > 0 で古い方へ、< 0 で新しい方へ
+function M.nav_commit(delta)
+  if not nav then
+    vim.notify("ブレイムから差分を開いているときに使えます", vim.log.levels.WARN)
+    return
+  end
+  local i = nav.idx + delta
+  if i < 1 then
+    vim.notify("これ以上新しい変更はありません", vim.log.levels.INFO)
+    return
+  end
+  if i > #nav.commits then
+    vim.notify("これ以上古い変更はありません", vim.log.levels.INFO)
+    return
+  end
+  nav.idx = i
+  local sha = nav.commits[i]
+  local r = vim.system({ "git", "-C", nav.dir, "log", "-1", "--format=%s", sha },
+    { text = true }):wait()
+  show(sha, vim.trim(r.stdout or ""), ("%d/%d"):format(i, #nav.commits))
+end
 
 function M.open_commit()
   local buf = vim.api.nvim_get_current_buf()
@@ -174,18 +246,15 @@ function M.open_commit()
   -- 知りたいのは「この行がなぜこうなったか」であって、
   -- 同じコミットの他ファイルまでは要らない。
   local file = vim.api.nvim_buf_get_name(buf)
-  local dir = vim.fn.fnamemodify(file, ":h")
-  local rel = file
-  local root = vim.system({ "git", "-C", dir, "rev-parse", "--show-toplevel" },
-    { text = true }):wait()
-  if root.code == 0 and root.stdout then
-    local top = vim.trim(root.stdout)
-    if top ~= "" and file:sub(1, #top + 1) == top .. "/" then rel = file:sub(#top + 2) end
-  end
+  local rel, dir = rel_path(file)
+  local commits = file_commits(dir, file)
 
-  vim.notify(("%s • %s\n（q または Space dc で戻る）"):format(
-    sha:sub(1, 7), c and c.summary or ""), vim.log.levels.INFO)
-  vim.cmd(("DiffviewOpen %s^! -- %s"):format(sha, vim.fn.fnameescape(rel)))
+  -- 何番目のコミットかを覚えておき、[h / ]h で前後に動けるようにする
+  local idx = 1
+  for i, h in ipairs(commits) do if h == sha then idx = i break end end
+  nav = { file = file, rel = rel, dir = dir, commits = commits, idx = idx, origin_buf = buf }
+
+  show(sha, c and c.summary or "", ("%d/%d"):format(idx, #commits))
 end
 
 -- ---- モードの切替 ----
@@ -279,6 +348,20 @@ vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, {
     for buf in pairs(state) do
       if vim.api.nvim_buf_is_valid(buf) then render(buf) end
     end
+  end,
+})
+
+vim.keymap.set("n", "[h", function() M.nav_commit(1) end,
+  { silent = true, desc = "前（古い）の変更へ" })
+vim.keymap.set("n", "]h", function() M.nav_commit(-1) end,
+  { silent = true, desc = "次（新しい）の変更へ" })
+
+-- 差分を閉じたら履歴移動の文脈も捨てる
+vim.api.nvim_create_autocmd("User", {
+  group = group,
+  pattern = "DiffviewViewClosed",
+  callback = function()
+    if not switching then nav = nil end
   end,
 })
 
