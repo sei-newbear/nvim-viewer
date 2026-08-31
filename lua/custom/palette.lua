@@ -111,6 +111,8 @@ local function actions()
     -- ---- エージェント連携 ----
     { name = "現在行をエージェントへ送る", en = "send line to agent context herdr", key = "Ctrl+L",
       run = function() require("custom.herdr_link").send_location() end },
+    { name = "送信先のエージェントを選ぶ", en = "pick choose select agent target herdr pane", key = "",
+      run = function() require("custom.herdr_link").pick() end },
     { name = "送信先のエージェントを確認する", en = "check agent target herdr", key = "",
       run = function() vim.cmd("HerdrTarget") end },
     { name = "現在位置を パス:行番号 でコピー", en = "copy file path line number", key = "Space y",

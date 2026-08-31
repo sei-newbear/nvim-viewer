@@ -62,28 +62,63 @@ local function has_agent_at(info)
   return info ~= nil and info.agent ~= nil and info.agent ~= vim.NIL
 end
 
-function M.resolve_target()
-  -- ペイン一覧は先に引く。明示指定でも cwd とエージェントの有無を
-  -- ここから取れるようにするため（指定したときだけ絶対パスになり、
-  -- エージェントが居なくても agent send を使う、という食い違いを消す）。
+--- 同じタブに居るエージェントを列挙する
+---
+--- 送信先を選ぶ画面と自動選択の両方がこれを使う。
+--- **必ず pane_id で並べること。** `pairs` は順序が不定なので、
+--- 並べないと同じタブに複数居るときに毎回違う相手へ送りうる
+--- （エラーも出ないので気づけない）。
+---@return table[] agents, string? me, table panes, boolean ok herdr から取得できたか
+local function tab_agents()
   local list = herdr_json({ "pane", "list" })
   local panes = {}
   if list and list.panes then
     for _, p in ipairs(list.panes) do panes[p.pane_id] = p end
   end
+  local me = self_pane()
+  local my_tab = me and panes[me] and panes[me].tab_id or nil
 
-  local forced = vim.g.herdr_agent_target or vim.env.HERDR_AGENT_TARGET
-  if forced and forced ~= "" then
+  local out = {}
+  if my_tab then
+    for _, p in pairs(panes) do
+      if p.tab_id == my_tab and p.pane_id ~= me and has_agent_at(p) then
+        table.insert(out, p)
+      end
+    end
+    table.sort(out, function(a, b) return a.pane_id < b.pane_id end)
+  end
+  return out, me, panes, list ~= nil
+end
+
+--- 選ばれている送信先を返す（無ければ nil）
+local function pinned()
+  local v = vim.g.herdr_agent_target or vim.env.HERDR_AGENT_TARGET
+  if v == nil or v == "" then return nil end
+  return v
+end
+
+function M.resolve_target()
+  local agents, me, panes, ok = tab_agents()
+
+  local forced = pinned()
+  if forced then
+    if not ok then
+      -- herdr の応答が無い。指定を消してしまうと復旧できないので、そのまま使う。
+      return forced, true, "指定した送信先（確認できず）", nil
+    end
     local info = panes[forced]
-    return forced, has_agent_at(info), "明示指定", info and info.cwd or nil
+    if info then
+      return forced, has_agent_at(info), "指定した送信先", info.cwd
+    end
+    -- 指定先が消えている。黙って失敗させず、自動選択に戻す。
+    vim.notify(("送信先 %s が見つかりません（閉じられた？）。自動選択に戻します"):format(forced),
+      vim.log.levels.WARN)
+    vim.g.herdr_agent_target = nil
   end
 
-  local me = self_pane()
   if not me then
     return nil, false, "HERDR_PANE_ID が無い（herdr の外で起動している）", nil
   end
-
-  local my_tab = panes[me] and panes[me].tab_id or nil
 
   -- 左隣のペイン。
   -- 注意: 戻り値の `pane_id` は問い合わせたペイン自身で、
@@ -99,12 +134,13 @@ function M.resolve_target()
 
   -- 左隣がシェルなどの場合、同じタブのエージェントの方が意図に近い。
   -- 左隣を無条件に優先すると、シェルへ文面が打ち込まれてしまう。
-  if my_tab then
-    for _, p in pairs(panes) do
-      if p.tab_id == my_tab and p.pane_id ~= me and has_agent_at(p) then
-        return p.pane_id, true, "同じタブ内のエージェント", p.cwd
-      end
-    end
+  -- 複数居るときは pane_id の若い方に固定する（tab_agents が並べてある）。
+  if agents[1] then
+    local a = agents[1]
+    local why = #agents > 1
+      and ("同じタブ内のエージェント（%d件中の先頭）"):format(#agents)
+      or "同じタブ内のエージェント"
+    return a.pane_id, true, why, a.cwd
   end
 
   -- エージェントがどこにも居なければ、左隣へ素の文字列として送る
@@ -424,11 +460,70 @@ function M.send_location()
   deliver(row, row, nil, ("%d行目"):format(row))
 end
 
+-- ---- 送信先を選ぶ ----
+
+--- 同じタブのエージェントから送信先を選ぶ
+---
+--- 範囲を同じタブに限っているのは、この道具の前提が
+--- 「いま隣で話している相手に、見ているコードを渡す」だから。
+--- 別タブのエージェントは視界に入っておらず、cwd も違うので
+--- 渡しても噛み合わない。
+---
+--- 選んだ結果は vim.g.herdr_agent_target に入れるだけ。
+--- 既存の上書き経路をそのまま使うので、新しい仕組みは足していない。
+--- nvim を閉じれば自動選択に戻る。
+function M.pick()
+  local agents, me, _, ok = tab_agents()
+  if not ok then
+    vim.notify("herdr から情報を取得できません", vim.log.levels.WARN)
+    return
+  end
+  if not me then
+    vim.notify("herdr の外で起動しています（Ctrl+L はクリップボードへコピーします）",
+      vim.log.levels.WARN)
+    return
+  end
+  if #agents == 0 then
+    vim.notify("このタブにエージェントが居ません", vim.log.levels.WARN)
+    return
+  end
+
+  local cur = pinned()
+  local items = { { auto = true } }
+  for _, a in ipairs(agents) do table.insert(items, a) end
+
+  vim.ui.select(items, {
+    prompt = "Ctrl+L の送信先",
+    format_item = function(it)
+      if it.auto then
+        return ("%s自動（左隣を優先／%d件から選ぶ）"):format(cur and "  " or "● ", #agents)
+      end
+      local title = it.terminal_title_stripped or it.terminal_title or ""
+      return ("%s%-7s %-8s %s"):format(
+        cur == it.pane_id and "● " or "  ",
+        it.pane_id, it.agent_status or "", clip(vim.trim(title), 40))
+    end,
+  }, function(choice)
+    if not choice then return end
+    if choice.auto then
+      vim.g.herdr_agent_target = nil
+      vim.notify("送信先: 自動（左隣を優先）", vim.log.levels.INFO)
+    else
+      vim.g.herdr_agent_target = choice.pane_id
+      vim.notify(("送信先: %s  %s"):format(choice.pane_id,
+        clip(vim.trim(choice.terminal_title_stripped or ""), 40)), vim.log.levels.INFO)
+    end
+  end)
+end
+
 -- ---- キーマップ / コマンド ----
 vim.keymap.set("v", "<C-l>", M.send_selection,
   { noremap = true, silent = true, desc = "選択箇所をエージェントへ送る" })
 vim.keymap.set("n", "<C-l>", M.send_location,
   { noremap = true, silent = true, desc = "現在行をエージェントへ送る" })
+
+vim.api.nvim_create_user_command("HerdrPick", function() M.pick() end,
+  { desc = "Ctrl+L の送信先を同じタブのエージェントから選ぶ" })
 
 vim.api.nvim_create_user_command("HerdrTarget", function()
   local target, has_agent, reason, cwd = M.resolve_target()
