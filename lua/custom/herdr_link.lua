@@ -136,24 +136,64 @@ local function path_for(abs, cwd)
   return abs
 end
 
---- 差分を見ているなら、そのリビジョンと左右どちら側かを返す
---- バッファ名で判別する:
----   diffview:///<repo>/.git/<rev>/<path>  そのリビジョンの中身（変更前側）
----   diffview://null                       変更前が存在しない（新規ファイル）
----   実ファイルのパス                       作業ツリー側（変更後）
+--- 差分を見ているなら、その情報を返す
+---
+--- バッファ名から判別してはいけない。差分側のバッファ名は
+--- `diffview:///<repo>/.git/:0:/<path>` のような内部表現で、
+--- そのまま File に出すとエージェントが開けないうえ、
+--- 左右の判別も付かない（コミット差分では両側が同じ形になる）。
+--- Diffview が持つモデル（cur_layout の a/b と cur_entry）を使う。
+---@return table? { rev = string?, side = string, path = string? }
 local function diff_context()
   local win = vim.api.nvim_get_current_win()
   if not vim.wo[win].diff then return nil end
 
-  local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
-  local rev = name:match("%.git/(%x+)/")
+  local ok, lib = pcall(require, "diffview.lib")
+  local v = ok and lib.views and lib.views[1]
+  if not (v and v.cur_layout) then return { side = "差分" } end
+
+  -- a = 左（変更前） / b = 右（変更後）
+  local side_key
+  if v.cur_layout.a and v.cur_layout.a.id == win then side_key = "a"
+  elseif v.cur_layout.b and v.cur_layout.b.id == win then side_key = "b" end
+  if not side_key then return { side = "差分" } end
+
+  local label = side_key == "a" and "変更前" or "変更後"
+  local file = v.cur_layout[side_key].file
+  local rev = file and file.rev
+
+  -- RevType: 1=作業ツリー 2=コミット 3=INDEX
+  local rev_sha, what
   if rev then
-    return { rev = rev, side = "変更前" }
+    if rev.commit then
+      rev_sha = tostring(rev.commit):sub(1, 10)
+      what = rev_sha
+    elseif rev.type == 1 then what = "作業ツリー"
+    elseif rev.type == 3 then what = "INDEX"
+    end
   end
-  if name:match("^diffview://null") then
-    return { side = "変更前（ファイル無し）" }
+
+  -- 実ファイルの相対パス（リポジトリルート基準）
+  local path = v.cur_entry and v.cur_entry.path or (file and file.path)
+
+  -- Commit 行にハッシュを出すので、Side には重ねない。
+  -- ハッシュが無いとき（作業ツリー/INDEX）だけ、どこの中身かを補う。
+  return {
+    rev = rev_sha,
+    side = (not rev_sha and what) and ("%s（%s）"):format(label, what) or label,
+    path = path,
+  }
+end
+
+--- リポジトリのルートを返す
+local function repo_root(from)
+  local r = vim.system({ "git", "-C", from, "rev-parse", "--show-toplevel" },
+    { text = true }):wait()
+  if r.code == 0 and r.stdout then
+    local top = vim.trim(r.stdout)
+    if top ~= "" then return top end
   end
-  return { side = "変更後（作業ツリー）" }
+  return nil
 end
 
 --- ブレイムモード中なら、その行を入れたコミットを返す
@@ -170,6 +210,13 @@ end
 local function build(srow, erow, cwd, selection)
   local abs = vim.api.nvim_buf_get_name(0)
   local range = (srow == erow) and tostring(srow) or ("%d-%d"):format(srow, erow)
+  local dc = diff_context()
+
+  -- 差分側のバッファ名は内部表現なので、Diffview が持つ実パスに置き換える
+  if dc and dc.path then
+    local root = repo_root(vim.fn.getcwd())
+    if root then abs = root .. "/" .. dc.path end
+  end
 
   local out = {
     "【参照コード】",
@@ -177,7 +224,6 @@ local function build(srow, erow, cwd, selection)
     "Lines: " .. range,
   }
 
-  local dc = diff_context()
   if dc then
     if dc.rev then table.insert(out, "Commit: " .. dc.rev) end
     table.insert(out, "Side: " .. dc.side)
