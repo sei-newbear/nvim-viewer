@@ -21,7 +21,11 @@
 # ===================================================================
 set -uo pipefail
 
-NVIM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# pwd -P で実体のパスにそろえる。
+# ~/.config/nvim を symlink にして実体を別の場所に置く構成
+# （個人アカウント用のディレクトリ配下に置きたい場合など）でも
+# 同じ場所だと判定できるようにするため。
+NVIM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 LIB_DIR="$HOME/.local/share/nvim-md-preview"
 PUPPETEER_JSON="$NVIM_DIR/mermaid-puppeteer.json"
 
@@ -48,7 +52,7 @@ head_ "0. 置き場所の確認"
 # 別の場所に clone した状態で実行すると、プラグインやパーサーの導入だけが
 # 「本物の設定」に対して行われ、意図しない結果になる。
 EXPECTED="${XDG_CONFIG_HOME:-$HOME/.config}/$APPNAME"
-if [ "$NVIM_DIR" != "$(cd "$EXPECTED" 2>/dev/null && pwd || echo "")" ]; then
+if [ "$NVIM_DIR" != "$(cd "$EXPECTED" 2>/dev/null && pwd -P || echo "")" ]; then
   printf '  \033[33m!\033[0m このリポジトリは %s にあります\n' "$NVIM_DIR"
   printf '    NVIM_APPNAME=%s なので、nvim が読むのは %s です。\n' "$APPNAME" "$EXPECTED"
   printf '    そこへ clone し直すか、symlink を張ってから実行してください。\n\n'
@@ -58,7 +62,11 @@ if [ "$NVIM_DIR" != "$(cd "$EXPECTED" 2>/dev/null && pwd || echo "")" ]; then
   printf '    中断しました。\n'
   exit 1
 fi
-ok "配置は正しい（$NVIM_DIR / NVIM_APPNAME=$APPNAME）"
+if [ "$NVIM_DIR" != "$EXPECTED" ]; then
+  ok "配置は正しい（$EXPECTED → $NVIM_DIR / NVIM_APPNAME=$APPNAME）"
+else
+  ok "配置は正しい（$NVIM_DIR / NVIM_APPNAME=$APPNAME）"
+fi
 
 # 既存の nvim 設定を壊していないかを、はっきり示す
 if [ "$APPNAME" != "nvim" ]; then
