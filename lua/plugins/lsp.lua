@@ -8,34 +8,60 @@ return {
     "neovim/nvim-lspconfig",
     event = { "BufReadPre", "BufNewFile" },
     config = function()
-      -- 検出対象: {lspconfig名, 実行ファイル名}
-      -- 実際にインストールされているものだけを有効化する
+      -- 検出対象: { lspconfig名, 実行ファイル名, skip_if = 先に採る方 }
+      -- 実際にインストールされているものだけを有効化する。
+      -- ここに無い言語サーバは、そのマシンに入っていても有効にならない。
+      -- 使いたいものがあれば、この表に足すこと（名前は lspconfig の
+      -- `lsp/<名前>.lua` に一致していないと黙って無視される）。
+      --
+      -- skip_if は「同じ言語に複数のサーバが入っている」ときの優先順位。
+      -- 両方を有効にすると診断が二重に出て読みにくくなる。
       local candidates = {
+        -- スクリプト・設定
         { "lua_ls",         "lua-language-server" },
-        { "gopls",          "gopls" },
-        { "vtsls",          "vtsls" },
-        { "ts_ls",          "typescript-language-server" },
-        { "pyright",        "pyright-langserver" },
-        { "ruff",           "ruff" },
-        { "rust_analyzer",  "rust-analyzer" },
-        { "kotlin_language_server", "kotlin-language-server" },
         { "bashls",         "bash-language-server" },
         { "jsonls",         "vscode-json-language-server" },
         { "yamlls",         "yaml-language-server" },
+        { "taplo",          "taplo" },                     -- TOML
+        { "marksman",       "marksman" },                  -- Markdown
+        { "dockerls",       "docker-langserver" },
+        { "terraformls",    "terraform-ls" },
+
+        -- JavaScript / TypeScript 系
+        { "vtsls",          "vtsls" },
+        { "ts_ls",          "typescript-language-server", skip_if = "vtsls" },
+        { "denols",         "deno" },                      -- Deno プロジェクトでのみ接続する
+        { "eslint",         "vscode-eslint-language-server" },
         { "html",           "vscode-html-language-server" },
         { "cssls",          "vscode-css-language-server" },
         { "tailwindcss",    "tailwindcss-language-server" },
-        { "eslint",         "vscode-eslint-language-server" },
+        { "svelte",         "svelteserver" },
+
+        -- コンパイル言語
+        { "gopls",          "gopls" },
+        { "rust_analyzer",  "rust-analyzer" },
+        { "clangd",         "clangd" },                    -- C / C++
+        { "zls",            "zls" },                       -- Zig
+        { "jdtls",          "jdtls" },                     -- Java
+        { "kotlin_language_server", "kotlin-language-server" },
+        { "hls",            "haskell-language-server-wrapper" },
+        { "ocamllsp",       "ocamllsp" },
+
+        -- 動的言語
+        { "pyright",        "pyright-langserver" },
+        { "ruff",           "ruff" },                      -- pyright と併用してよい（役割が違う）
+        { "ruby_lsp",       "ruby-lsp" },
+        { "solargraph",     "solargraph",   skip_if = "ruby_lsp" },
+        { "intelephense",   "intelephense" },              -- PHP
+        { "phpactor",       "phpactor",     skip_if = "intelephense" },
       }
 
       local enabled = {}
       for _, c in ipairs(candidates) do
         local name, bin = c[1], c[2]
-        if vim.fn.executable(bin) == 1 then
-          -- TypeScript は vtsls と ts_ls が両方あれば vtsls を優先
-          if not (name == "ts_ls" and vim.tbl_contains(enabled, "vtsls")) then
-            table.insert(enabled, name)
-          end
+        if vim.fn.executable(bin) == 1
+          and not (c.skip_if and vim.tbl_contains(enabled, c.skip_if)) then
+          table.insert(enabled, name)
         end
       end
 
