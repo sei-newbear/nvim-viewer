@@ -19,7 +19,7 @@ git clone git@github.com:sei-newbear/nvim-viewer.git ~/.config/nvim
 git clone https://github.com/sei-newbear/nvim-viewer.git ~/.config/nvim
 
 ~/.config/nvim/scripts/bootstrap.sh
-nvim
+nvim-viewer
 ```
 
 ### B. 既に nvim を使っている場合（上書きしてはいけない）
@@ -40,13 +40,22 @@ nvim
 ```bash
 git clone https://github.com/sei-newbear/nvim-viewer.git ~/.config/viewer
 NVIM_APPNAME=viewer ~/.config/viewer/scripts/bootstrap.sh
-nvim-viewer          # bootstrap.sh がこの起動コマンドを用意する
+nvim-viewer
 ```
 
 | | 設定 | プラグイン |
 |---|---|---|
 | `nvim`（従来どおり） | `~/.config/nvim` | `~/.local/share/nvim` |
 | `nvim-viewer` | `~/.config/viewer` | `~/.local/share/viewer` |
+
+---
+
+**どちらで入れても起動は `nvim-viewer`。** `bootstrap.sh` が
+`~/.local/bin/nvim-viewer` を用意する。導入先によって呼び名が変わると、
+人に渡したときに「どちらで入れたか」を聞かないと案内できなくなるため。
+
+A で入れた場合は `nvim` でも同じものが立つ（`~/.config/nvim` がこの設定なので）。
+B で入れた場合の `nvim` は、今までの設定のまま。
 
 ---
 
@@ -88,7 +97,7 @@ nvim-viewer          # bootstrap.sh がこの起動コマンドを用意する
 ## 起動
 
 ```bash
-nvim <ファイル or ディレクトリ>
+nvim-viewer <ファイル or ディレクトリ>
 ```
 
 ## キー操作
