@@ -485,17 +485,84 @@ print(struct.unpack('HHHH',b))"   # (rows, cols, xpixel, ypixel)
 Diffview・yazi・lazy.nvim などの UI バッファは対象外（除外しないと壊れるため）。
 編集は左ペインのエージェントに依頼する運用。
 
-## インストール済みの言語サーバ
+## 対応している言語
 
-| 言語 | サーバ | 導入方法 |
+**ハイライトと LSP は別々**で、必要なものが違う。
+
+| | 何が要るか | 対象 |
 |---|---|---|
-| TypeScript / JavaScript | vtsls | `npm i -g @vtsls/language-server typescript` |
-| Go | gopls | `go install golang.org/x/tools/gopls@latest` |
-| Kotlin | kotlin-language-server (fwcd 1.3.13) | `~/.local/share/kotlin-lsp/` + `~/.local/bin/kotlin-language-server` ラッパー |
-| JSON / HTML / CSS / ESLint | vscode-langservers-extracted | `npm i -g vscode-langservers-extracted` |
+| ハイライト・構造認識 | **何も要らない**（パーサーは `bootstrap.sh` が入れる） | 39言語 |
+| 定義ジャンプ・参照検索 | **その言語サーバを自分で入れる** | 39サーバ |
 
-言語サーバは `lua/plugins/lsp.lua` の `candidates` に列挙されており、
-**実行ファイルが存在するものだけ**が自動で有効化される。追加したい場合はそこに1行足す。
+### ハイライト（追加インストール不要）
+
+一覧は `lua/core/parsers.lua`。`:TSInstalled` で導入済みを確認できる。
+
+```
+bash c clojure cpp css dart diff dockerfile fsharp go haskell helm html
+java javascript json kotlin lua luadoc markdown markdown_inline ocaml php
+python query regex ruby rust scala sql svelte terraform toml tsx
+typescript vim vimdoc yaml zig
+```
+
+### 定義ジャンプ（言語サーバの導入が必要）
+
+一覧は `lua/plugins/lsp.lua` の `candidates`。
+**実行ファイルが存在するものだけ**が自動で有効になる。入っていないものは無視されるだけで、
+起動が重くなることはない（起動時の存在確認が 1 件あたり 0.1ms 程度）。
+
+| 分類 | 言語 | サーバ（実行ファイル名） |
+|---|---|---|
+| 設定・文書 | Lua / Bash | `lua-language-server` / `bash-language-server` |
+| | JSON / YAML / TOML | `vscode-json-language-server` / `yaml-language-server` / `taplo` |
+| | Markdown | `marksman` |
+| | SQL | `sqls`（または `sql-language-server` / `postgres-language-server`） |
+| | Dockerfile / Terraform | `docker-langserver` / `terraform-ls` |
+| | Helm | `helm_ls` |
+| Web | TypeScript / JavaScript | `vtsls`（または `typescript-language-server`） |
+| | Deno | `deno` |
+| | HTML / CSS / ESLint | `vscode-{html,css,eslint}-language-server` |
+| | Tailwind / Svelte | `tailwindcss-language-server` / `svelteserver` |
+| コンパイル言語 | Go / Rust | `gopls` / `rust-analyzer` |
+| | C / C++ | `clangd` |
+| | Java / Kotlin | `jdtls` / `kotlin-language-server` |
+| | Scala / F# | `metals` / `fsautocomplete` |
+| | Zig / Haskell / OCaml | `zls` / `haskell-language-server-wrapper` / `ocamllsp` |
+| | Dart | `dart`（SDK 本体。`dart language-server` を使う） |
+| 動的言語 | Python | `pyright-langserver` ＋ `ruff`（役割が違うので併用する） |
+| | Ruby | `ruby-lsp`（または `solargraph`） |
+| | PHP | `intelephense`（または `phpactor`） |
+| | Clojure | `clojure-lsp` |
+| テスト | Gauge の仕様（`.spec` / `.cpt`） | `gauge`（`gauge daemon --lsp`） |
+
+同じ言語に複数入っている場合の優先順位は `skip_if` で決める
+（`vtsls` > `ts_ls`、`ruby-lsp` > `solargraph`、`intelephense` > `phpactor`、
+`sqls` > その他の SQL）。両方有効にすると診断が二重に出るため。
+
+**ここに無い言語は、入れても有効にならない。** 足すには `candidates` に1行書く。
+名前は `nvim-lspconfig` の `lsp/<名前>.lua` に実在していないと、
+エラーにならず静かに無視される。
+
+```bash
+ls ~/.local/share/nvim/lazy/nvim-lspconfig/lsp/ | grep '^<名前>\.lua$'
+```
+
+### いま自分の環境で何が効いているか
+
+```
+:LspEnabled     有効になっている言語サーバを表示
+:TSInstalled    導入済みのパーサーを表示
+```
+
+`bootstrap.sh` が自動で入れるのは **TypeScript / JSON・HTML・CSS・ESLint / Go** だけ。
+残りは「既に入っていれば使う」という扱いなので、必要なものは自分で入れる。
+
+| 言語 | 導入方法 |
+|---|---|
+| TypeScript / JavaScript | `npm i -g @vtsls/language-server typescript` |
+| JSON / HTML / CSS / ESLint | `npm i -g vscode-langservers-extracted` |
+| Go | `go install golang.org/x/tools/gopls@latest` |
+| Kotlin | `~/.local/share/kotlin-lsp/` に fwcd 版を展開し、`~/.local/bin/kotlin-language-server` にラッパーを置く（手順書の第4.3節） |
 
 注意: npm 製のサーバは mise の Node インストール先に入るため、
 mise で Node のメジャーバージョンを上げた場合は入れ直しが必要。
