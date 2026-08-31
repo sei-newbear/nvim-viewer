@@ -41,15 +41,20 @@ local function rel_path(buf)
   return path
 end
 
+-- 幅の計測に strdisplaywidth を使ってはいけない。
+-- あれは**現在窓**の折り返し設定（wrap / showbreak / breakindent）を
+-- 勘定に入れるため、狭い窓やマークダウンを開いているときに
+-- 素の文字幅と大きく食い違う。UI の文字は窓に依存しない strwidth で測る。
+
 --- 幅に収まるよう、パスの先頭側を省略する
 local function shorten(path, budget)
-  if vim.fn.strdisplaywidth(path) <= budget then return path end
+  if vim.fn.strwidth(path) <= budget then return path end
 
   -- ディレクトリ単位で先頭から削り、末尾をできるだけ残す
   local parts = vim.split(path, "/", { plain = true })
   for i = 2, #parts do
     local tail = "…/" .. table.concat(parts, "/", i)
-    if vim.fn.strdisplaywidth(tail) <= budget then return tail end
+    if vim.fn.strwidth(tail) <= budget then return tail end
   end
 
   -- ファイル名だけでも入らない場合は、文字単位で頭を削る
@@ -57,7 +62,7 @@ local function shorten(path, budget)
   local keep, w = "", 0
   for i = vim.fn.strchars(name) - 1, 0, -1 do
     local c = vim.fn.strcharpart(name, i, 1)
-    local cw = vim.fn.strdisplaywidth(c)
+    local cw = vim.fn.strwidth(c)
     if w + cw > budget - 1 then break end
     keep, w = c .. keep, w + cw
   end

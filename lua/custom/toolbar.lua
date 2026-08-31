@@ -127,9 +127,9 @@ end
 local function cost(list, with_hints)
   local n = 0
   for _, e in ipairs(list) do
-    n = n + vim.fn.strdisplaywidth(label_of(e.button)) + 2 -- ラベル＋左右の余白
+    n = n + vim.fn.strwidth(label_of(e.button)) + 2 -- ラベル＋左右の余白
     if with_hints and e.button.hint and e.button.hint ~= "" then
-      n = n + vim.fn.strdisplaywidth(e.button.hint) + 1
+      n = n + vim.fn.strwidth(e.button.hint) + 1
     end
   end
   -- 区切りは "│" の1桁。ここを実際の描画と合わせないと、

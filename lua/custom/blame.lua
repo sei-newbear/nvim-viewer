@@ -41,11 +41,11 @@ end
 
 --- 表示幅で切り詰める（バイト単位で切ると多バイト文字が壊れる）
 local function shorten(s, w)
-  if vim.fn.strdisplaywidth(s) <= w then return s end
+  if vim.fn.strwidth(s) <= w then return s end
   local out, acc = "", 0
   for i = 0, vim.fn.strchars(s) - 1 do
     local c = vim.fn.strcharpart(s, i, 1)
-    local cw = vim.fn.strdisplaywidth(c)
+    local cw = vim.fn.strwidth(c)
     if acc + cw > w - 1 then break end
     out, acc = out .. c, acc + cw
   end
@@ -64,10 +64,10 @@ local function label(commit, room)
   local budget = math.min(M.opts.max_width, room)
 
   local full = ("%s • %s"):format(who, msg)
-  if vim.fn.strdisplaywidth(full) <= budget then return full end
+  if vim.fn.strwidth(full) <= budget then return full end
 
   -- 「誰が・いつ」を入れてもメッセージが十分残るなら、その形で切る
-  local if_full = budget - vim.fn.strdisplaywidth(who) - 3
+  local if_full = budget - vim.fn.strwidth(who) - 3
   if if_full >= 16 then return who .. " • " .. shorten(msg, if_full) end
 
   -- 残らないならメッセージだけにする
@@ -149,7 +149,7 @@ local function render(buf)
           -- 右揃えは virt_text_pos="right_align" に任せず、自分で余白を詰める。
           -- right_align は幅が足りないと描画自体を落とすことがあり、
           -- 行によって出たり出なかったりして安定しない。
-          local pad = avail_total - code_w - vim.fn.strdisplaywidth(body)
+          local pad = avail_total - code_w - vim.fn.strwidth(body)
           vim.api.nvim_buf_set_extmark(buf, NS, i - 1, 0, {
             virt_text = { { string.rep(" ", math.max(1, pad)) .. body, "Comment" } },
             virt_text_pos = "eol",
