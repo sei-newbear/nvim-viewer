@@ -4,6 +4,26 @@
 
 local map = vim.keymap.set
 
+-- ---- Neovim 標準キーのうち、閲覧専用に反するものを外す ----
+-- Neovim 0.11+ は LSP 用のキーを既定で張る。このうち
+--   grn = rename（識別子を一括改名）
+--   gra = code action（自動修正の適用）
+--   grx = codelens 実行
+--   gcc = コメントの切替
+-- は **ファイルを書き換える操作**で、閲覧専用の方針に反する。
+--
+-- さらに実害として、gr で始まるキーが6個あるせいで
+-- `gr`（参照一覧）が timeoutlen 分（400ms）待たないと発火せず、
+-- 体感で明らかに遅い。読むための操作が遅くなるのは本末転倒なので外す。
+-- 残す grr/gri/grt は同等の機能を gr/gi/gy で提供している。
+for _, k in ipairs({ "grn", "gra", "grx", "grr", "gri", "grt", "gcc", "gc", "gbc" }) do
+  pcall(vim.keymap.del, "n", k)
+end
+for _, k in ipairs({ "gra", "gc" }) do
+  pcall(vim.keymap.del, "x", k)
+  pcall(vim.keymap.del, "v", k)
+end
+
 -- 検索ハイライト解除
 map("n", "<Esc>", "<cmd>nohlsearch<CR>", { desc = "ハイライト解除" })
 
