@@ -52,7 +52,29 @@ end
 
 --- フッターに並べる操作
 --- when: 出す条件 / prio: 幅が足りないとき残る優先度（大きいほど残る）
+--- ブレイムから差分を開いている最中か
+local function in_blame_nav()
+  local ok, b = pcall(require, "custom.blame")
+  return ok and b.nav_state() ~= nil
+end
+
 local ITEMS = {
+  -- 履歴の移動。差分を開いたまま前後のコミットへ行ける。
+  -- キーを知らなくても押せるよう、クリックできる形でここに出す。
+  { label = "◀ 前の変更", key = "[h", prio = 99, when = in_blame_nav,
+    run = function() require("custom.blame").nav_commit(1) end },
+  { label = function()
+      local ok, b = pcall(require, "custom.blame")
+      local st = ok and b.nav_state()
+      return st and ("%d/%d"):format(st.idx, st.total) or ""
+    end,
+    key = "", prio = 98, when = in_blame_nav,
+    run = function() end }, -- 現在位置の表示（押しても何もしない）
+  { label = "次の変更 ▶", key = "]h", prio = 97, when = in_blame_nav,
+    run = function() require("custom.blame").nav_commit(-1) end },
+  { label = "閉じる", key = "q", prio = 96, when = in_blame_nav,
+    run = function() vim.cmd("DiffviewClose") end },
+
   -- 差分から実ファイルへ。「差分→全体→定義」の流れの要なので最優先。
   { label = "ファイルを開く", key = "gf", prio = 100, when = in_diff,
     run = function()
@@ -127,7 +149,7 @@ local function fit(width)
     local n = 0
     for _, e in ipairs(list) do
       n = n + vim.fn.strdisplaywidth(label_of(e.it))
-        + vim.fn.strdisplaywidth(e.it.key) + 3
+        + (e.it.key ~= "" and (vim.fn.strdisplaywidth(e.it.key) + 1) or 0) + 2
     end
     return n + math.max(0, #list - 1) -- 区切り "│"
   end
@@ -160,9 +182,10 @@ function M.render()
   local mid = { "%#StatusLine# " }
   for i, e in ipairs(list) do
     if i > 1 then table.insert(mid, "%#NonText#│") end
+    local key = e.it.key ~= "" and ("%#Comment#" .. e.it.key .. "%#StatusLine#") or ""
     table.insert(mid,
-      ("%%%d@v:lua.ViewerStatusJumpClick@%%#StatusLine# %s %%#Comment#%s%%#StatusLine# %%X")
-        :format(e.idx, label_of(e.it), e.it.key))
+      ("%%%d@v:lua.ViewerStatusJumpClick@%%#StatusLine# %s%s %%X")
+        :format(e.idx, label_of(e.it), e.it.key ~= "" and (" " .. e.it.key) or ""))
   end
 
   return table.concat(mid) .. "%#StatusLine#%=" .. right
@@ -177,9 +200,22 @@ function M.disable()
   vim.o.statusline = ""
 end
 
-vim.api.nvim_create_autocmd({ "LspAttach", "LspDetach", "BufEnter", "WinEnter" }, {
-  group = vim.api.nvim_create_augroup("ViewerStatusline", { clear = true }),
+local sl_group = vim.api.nvim_create_augroup("ViewerStatusline", { clear = true })
+
+vim.api.nvim_create_autocmd(
+  { "LspAttach", "LspDetach", "BufEnter", "WinEnter", "TabEnter", "TabClosed" }, {
+  group = sl_group,
   callback = function() vim.cmd("redrawstatus") end,
+})
+
+-- 差分を閉じた直後は、閉じる処理の途中で描き直されて古い内容が残ることがある。
+-- 完全に閉じ切ってからもう一度描く。
+vim.api.nvim_create_autocmd("User", {
+  group = sl_group,
+  pattern = { "DiffviewViewClosed", "DiffviewViewOpened" },
+  callback = function()
+    vim.schedule(function() pcall(vim.cmd, "redrawstatus") end)
+  end,
 })
 
 vim.api.nvim_create_user_command("StatuslineToggle", function()

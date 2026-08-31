@@ -198,7 +198,32 @@ local function show(sha, summary, pos)
   local ok, lib = pcall(require, "diffview.lib")
   if ok and lib.views and #lib.views > 0 then pcall(vim.cmd, "DiffviewClose") end
   vim.cmd(("DiffviewOpen %s^! -- %s"):format(sha, vim.fn.fnameescape(nav.rel)))
+
+  -- 1ファイルしか見ていないので、左のファイル一覧は場所の無駄。
+  -- 隠すと差分が全幅に広がって読みやすくなる。
+  vim.defer_fn(function()
+    local ok2, lib2 = pcall(require, "diffview.lib")
+    local v = ok2 and lib2.views and lib2.views[1]
+    if v and v.panel and v.panel.is_open and v.panel:is_open() then
+      pcall(function() v.panel:close() end)
+    end
+  end, 120)
+
   vim.schedule(function() switching = false end)
+end
+
+--- 履歴移動が有効か、いま何番目かを返す（フッターが参照する）
+--- DiffviewViewClosed のイベントだけに頼ると閉じ方によって取りこぼすので、
+--- 「差分が実際に開いているか」を毎回見て自己修復する。
+function M.nav_state()
+  if not nav then return nil end
+  if switching then return { idx = nav.idx, total = #nav.commits } end
+  local ok, lib = pcall(require, "diffview.lib")
+  if not (ok and lib.views and #lib.views > 0) then
+    nav = nil
+    return nil
+  end
+  return { idx = nav.idx, total = #nav.commits }
 end
 
 --- 前後のコミットへ移動する（差分を開いたまま）
