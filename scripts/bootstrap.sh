@@ -143,7 +143,7 @@ fi
 
 # Kotlin は Java が要り重いので、既に java がある場合だけ案内する
 if has java && ! has kotlin-language-server; then
-  warn "Kotlin を使うなら kotlin-language-server の導入が別途必要（docs/ の手順書を参照）"
+  warn "Kotlin を使うなら kotlin-language-server の導入が別途必要（docs/design-notes.md 第4.3節）"
 fi
 
 # -------------------------------------------------------------------

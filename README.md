@@ -55,7 +55,9 @@ mermaid 関連）を導入し、Chrome のパスを検出して `mermaid-puppete
 
 - `lua/` — 設定と自作モジュール
 - `scripts/bootstrap.sh` — 新しいマシンの初期化
-- `docs/` — 構築手順書（完成版・差分版）と TODO
+- `docs/design-notes.md` — **なぜそう作ったか / 触ると何が壊れるか。**
+  設定を変える前に読む。設定ファイルの中身は載せていない（このリポジトリが正）
+- `docs/todo.md` — 残っている作業
 - `lazy-lock.json` — **コミットに含める。** プラグインの版を固定し、
   どのマシンでも同じ状態になる。勝手な更新も起きない
 - `mermaid-puppeteer.json` — **管理しない。** Chrome の場所が環境で違うため
