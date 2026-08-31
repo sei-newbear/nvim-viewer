@@ -311,6 +311,29 @@ end
 ---   V      行単位   → 参照だけ（エージェントが読めるので十分）
 ---   v      文字単位 → 参照＋選んだ文字（行参照では表現できないため）
 ---   Ctrl-V 矩形     → 同上
+-- 選択に付ける上限。
+-- これは「入力欄を守るため」ではなく、事故を防ぐための最後の砦。
+-- agent send は Enter を押さないので、長すぎたら入力欄で消せばよく、
+-- 送るかどうかを決めるのは受け取る側。
+-- 一方 minified なファイルは1行が数万文字あり、そこで v$ を押すと
+-- それが丸ごと流し込まれる。手書きのコードならまず届かない値にする。
+local MAX_SELECTION = 2000
+
+--- 表示幅で切り詰める（バイトで切ると多バイト文字が壊れる）
+--- 必要な幅に達した時点で止まるので、極端に長い行でも走査は一定量で済む
+---@return string text, boolean cut
+local function clip(s, w)
+  if vim.fn.strwidth(s) <= w then return s, false end
+  local out, acc = "", 0
+  for i = 0, vim.fn.strchars(s) - 1 do
+    local c = vim.fn.strcharpart(s, i, 1)
+    local cw = vim.fn.strwidth(c)
+    if acc + cw > w - 1 then break end
+    out, acc = out .. c, acc + cw
+  end
+  return out .. "…", true
+end
+
 --- 選んだ文字を1行に収める
 ---
 --- 複数行をただ空白でつなぐと、原文のどこにも無い文字列になる
@@ -334,9 +357,17 @@ local function format_selection(lines)
   end
 
   if joined == "" then return nil end
-  -- 長すぎるものは行参照で足りるので添えない
-  if vim.fn.strwidth(joined) > 80 then return nil end
-  return joined
+
+  -- 長いからといって黙って捨てない。
+  -- 以前は80桁を超えると `選択:` ごと落としていたため、
+  -- 長い行では v（文字選択）と V（行選択）の文面が完全に同じになり、
+  -- 「行のどこを指しているか」を伝える手段が消えていた。
+  local text, cut = clip(joined, MAX_SELECTION)
+  if cut then
+    vim.notify(("選択が長いので %d 桁で切りました"):format(MAX_SELECTION),
+      vim.log.levels.WARN)
+  end
+  return text
 end
 
 function M.send_selection()
@@ -379,7 +410,9 @@ function M.send_selection()
 
   vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
 
-  local label = selection and ("「%s」"):format(selection)
+  -- 通知に選択文字をそのまま出すと、長い選択で画面が埋まる。
+  -- 「何を送ったか」が分かれば十分なので、通知用は短く切る。
+  local label = selection and ("「%s」"):format((clip(selection, 40)))
     or ((srow == erow) and ("%d行目"):format(srow) or ("%d-%d行目"):format(srow, erow))
   deliver(srow, erow, selection, label)
 end
