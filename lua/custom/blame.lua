@@ -344,6 +344,19 @@ function M.toggle(buf)
   end
 end
 
+--- 指定行を入れたコミットの短いハッシュを返す（herdr_link が参照する）
+--- ブレイムモードでないとき、未コミット行のときは nil
+function M.commit_at(lnum, buf)
+  buf = buf or vim.api.nvim_get_current_buf()
+  local st = state[buf]
+  if not st then return nil end
+  local sha = st.lines[lnum]
+  if not sha then return nil end
+  local c = st.commits[sha]
+  if c and c.uncommitted then return nil end
+  return sha:sub(1, 10)
+end
+
 --- 現在ブレイムモードか（ツールバー等から参照する）
 function M.is_on(buf)
   return state[buf or vim.api.nvim_get_current_buf()] ~= nil
