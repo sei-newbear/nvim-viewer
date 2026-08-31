@@ -12,15 +12,15 @@
 
 return {
   -- 設定・文書
-  "bash", "diff", "dockerfile", "json", "markdown", "markdown_inline",
+  "bash", "diff", "dockerfile", "helm", "json", "markdown", "markdown_inline",
   "query", "regex", "sql", "terraform", "toml", "vim", "vimdoc", "yaml",
 
   -- Web
   "css", "html", "javascript", "svelte", "tsx", "typescript",
 
   -- コンパイル言語
-  "c", "cpp", "go", "haskell", "java", "kotlin", "ocaml", "rust",
-  "scala", "zig",
+  "c", "cpp", "fsharp", "go", "haskell", "java", "kotlin", "ocaml",
+  "rust", "scala", "zig",
 
   -- 動的言語・その他
   "clojure", "dart", "lua", "luadoc", "php", "python", "ruby",

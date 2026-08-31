@@ -25,6 +25,8 @@ return {
         { "taplo",          "taplo" },                     -- TOML
         { "marksman",       "marksman" },                  -- Markdown
         { "dockerls",       "docker-langserver" },
+        -- Helm: core/filetypes.lua で filetype=helm にしないと接続しない
+        { "helm_ls",        "helm_ls" },
         { "terraformls",    "terraform-ls" },
 
         -- JavaScript / TypeScript 系
@@ -47,6 +49,9 @@ return {
         { "hls",            "haskell-language-server-wrapper" },
         { "ocamllsp",       "ocamllsp" },
         { "metals",         "metals" },                    -- Scala
+        -- F#: lspconfig の説明は「.fs が Forth になる」と書いているが、
+        -- Neovim 0.12 は .fs / .fsx / .fsi を fsharp と判定する（確認済み）
+        { "fsautocomplete", "fsautocomplete" },
         -- Dart は実行ファイルが SDK 本体（dart language-server）
         { "dartls",         "dart" },
 

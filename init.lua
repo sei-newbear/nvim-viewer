@@ -20,6 +20,7 @@ vim.opt.rtp:prepend(lazypath)
 -- コア設定（プラグインより先に読み込む）
 require("core.options")
 require("core.keymaps")
+require("core.filetypes") -- Helm など、標準では判別されないもの
 
 -- プラグイン読み込み
 require("lazy").setup({
