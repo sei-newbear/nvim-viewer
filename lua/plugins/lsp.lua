@@ -23,6 +23,11 @@ return {
         { "jsonls",         "vscode-json-language-server" },
         { "yamlls",         "yaml-language-server" },
         { "taplo",          "taplo" },                     -- TOML
+        -- SQL: ハイライトはパーサーだけで効く。これらは補完・検証が要る場合。
+        -- sqls / sqlls は接続先を設定しないと機能が限られる。
+        { "sqls",           "sqls" },
+        { "sqlls",          "sql-language-server", skip_if = "sqls" },
+        { "postgres_lsp",   "postgres-language-server", skip_if = "sqls" },
         { "marksman",       "marksman" },                  -- Markdown
         { "dockerls",       "docker-langserver" },
         -- Helm: core/filetypes.lua で filetype=helm にしないと接続しない
@@ -72,6 +77,25 @@ return {
           and not (c.skip_if and vim.tbl_contains(enabled, c.skip_if)) then
           table.insert(enabled, name)
         end
+      end
+
+      -- ---- lspconfig に定義が無いもの ----
+      -- Gauge（受け入れテスト）の仕様ファイル。
+      -- 実装（Java / Kotlin など）へのジャンプはこのサーバが担う。
+      -- 起動方法は `gauge daemon --lsp --dir <ルート>`。
+      -- --dir を渡さないと nvim の cwd を見るため、
+      -- 下位ディレクトリから起動したときに解決できなくなる。
+      if vim.fn.executable("gauge") == 1 and vim.lsp.config then
+        vim.lsp.config("gauge", {
+          cmd = function(dispatchers, config)
+            local root = config and config.root_dir or vim.fn.getcwd()
+            return vim.lsp.rpc.start(
+              { "gauge", "daemon", "--lsp", "--dir", root }, dispatchers, { cwd = root })
+          end,
+          filetypes = { "gauge" },
+          root_markers = { "manifest.json", ".git" },
+        })
+        table.insert(enabled, "gauge")
       end
 
       if #enabled > 0 then
