@@ -160,10 +160,19 @@ local function send_to_pane(target, has_agent, text)
 
   -- エージェントが居るペインなら agent send、そうでなければ pane send-text
   local subcmd = has_agent and { "agent", "send" } or { "pane", "send-text" }
+
+  -- 末尾の改行は送り先で意味が変わる。
+  --   agent send    : 入力欄に改行が入るだけ。送信はされない。
+  --                   **付けないと、続けて送ったときに前の文面と行が繋がる**
+  --                     Lines: 23【参照コード】
+  --                   付けておけば次が新しい行から始まり、そのまま質問も書ける。
+  --   pane send-text: 相手はシェルなので、改行はそのまま実行になる。付けない。
+  local payload = has_agent and (text .. "\n") or text
+
   local cmd = { bin }
   vim.list_extend(cmd, subcmd)
   table.insert(cmd, target)
-  table.insert(cmd, text)
+  table.insert(cmd, payload)
 
   local ok, res = pcall(function() return vim.system(cmd, { text = true }):wait(TIMEOUT_MS) end)
   if not ok or not res then return false, "herdr が応答しません" end
@@ -292,8 +301,8 @@ local function build(srow, erow, cwd, selection)
     table.insert(out, "選択: " .. selection)
   end
 
-  -- 末尾に空行を足さない。pane send-text ではそれが literal な Enter に
-  -- なり、「Enter は押さないので質問を書き足せる」という前提が崩れる。
+  -- ここでは末尾に改行を付けない。付けるかどうかは送り先で決める
+  -- （送信経路によって改行の意味が変わるため。send_to_pane を見ること）。
   return table.concat(out, "\n")
 end
 
@@ -330,9 +339,9 @@ local function deliver(srow, erow, selection, label)
       vim.log.levels.WARN)
   end
 
-  -- フォールバック: クリップボードへ
-  vim.fn.setreg("+", text)
-  vim.fn.setreg('"', text)
+  -- フォールバック: クリップボードへ（貼り付けたときに行が繋がらないよう改行を付ける）
+  vim.fn.setreg("+", text .. "\n")
+  vim.fn.setreg('"', text .. "\n")
   vim.notify(target and "クリップボードへコピーしました"
     or ("クリップボードへコピーしました（%s）"):format(reason), vim.log.levels.INFO)
 end
