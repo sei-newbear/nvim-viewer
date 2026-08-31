@@ -40,6 +40,16 @@ local function home_buf()
   return nil
 end
 
+--- 名前も中身も無いバッファか
+--- 戻り先が無いとき（home が nil）に作られる空バッファがこれに当たる。
+--- 数に入れて消すと、何も開いていない状態で `Space 0` を押すたびに
+--- 「片付けました（ファイル1）」と嘘の報告が出る。
+local function is_blank(buf)
+  if vim.api.nvim_buf_get_name(buf) ~= "" then return false end
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, 2, false)
+  return #lines == 0 or (#lines == 1 and lines[1] == "")
+end
+
 --- すべて閉じて最初の状態に戻す
 ---@param opts? { keep_buffers?: boolean }
 function M.reset(opts)
@@ -63,19 +73,31 @@ function M.reset(opts)
   end
 
   -- 3) 浮動ウィンドウ（早見表・ホバー・通知など）を閉じる
+  -- ピッカーの窓は 2) で閉じた分がまだ残っていることがある（破棄が非同期）。
+  -- それを数えると「一覧1 / ポップアップ4」のように同じものを二重に報告して
+  -- しまうので、閉じはするが数には入れない。
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     local cfg = vim.api.nvim_win_get_config(win)
     if cfg.relative and cfg.relative ~= "" then
-      if pcall(vim.api.nvim_win_close, win, true) then closed.float = closed.float + 1 end
+      local buf = vim.api.nvim_win_get_buf(win)
+      local is_picker = tostring(vim.bo[buf].filetype):match("^snacks_picker") ~= nil
+      if pcall(vim.api.nvim_win_close, win, true) and not is_picker then
+        closed.float = closed.float + 1
+      end
     end
   end
 
-  -- 4) 余分なタブページを閉じる
+  -- 4) 分割の数を先に数える
+  -- tabonly の後に現在タブだけを見ると、他のタブにあった分割が
+  -- 黙って閉じられて報告から消える。
+  closed.win = 0
+  for _, tp in ipairs(vim.api.nvim_list_tabpages()) do
+    closed.win = closed.win + math.max(0, #vim.api.nvim_tabpage_list_wins(tp) - 1)
+  end
+
+  -- 5) 余分なタブページと分割を閉じる
   closed.tab = math.max(0, #vim.api.nvim_list_tabpages() - 1)
   pcall(vim.cmd, "silent! tabonly")
-
-  -- 5) 分割を1つに戻す
-  closed.win = math.max(0, #vim.api.nvim_tabpage_list_wins(0) - 1)
   pcall(vim.cmd, "silent! only")
 
   -- 6) 最初のファイルへ戻る
@@ -87,7 +109,8 @@ function M.reset(opts)
   -- 7) 他のバッファを片付ける（Space b の一覧も綺麗になる）
   if not opts.keep_buffers then
     for _, b in ipairs(vim.api.nvim_list_bufs()) do
-      if b ~= home and vim.api.nvim_buf_is_valid(b) and vim.bo[b].buflisted then
+      if b ~= home and vim.api.nvim_buf_is_valid(b) and vim.bo[b].buflisted
+        and not is_blank(b) then
         if pcall(vim.api.nvim_buf_delete, b, { force = true }) then
           closed.buf = closed.buf + 1
         end

@@ -32,12 +32,16 @@ end
 
 --- herdr コマンドを実行する
 --- リスト形式で渡すので、コード中のクォートやバックティックで壊れない
+-- herdr が応答しないと Neovim ごと止まるので、必ず上限を切る
+local TIMEOUT_MS = 2000
+
 local function herdr_json(args)
   local bin = herdr_bin()
   if not bin then return nil end
   local cmd = { bin }
   vim.list_extend(cmd, args)
-  local res = vim.system(cmd, { text = true }):wait()
+  local ok, res = pcall(function() return vim.system(cmd, { text = true }):wait(TIMEOUT_MS) end)
+  if not ok or not res then return nil end
   if res.code ~= 0 or not res.stdout or res.stdout == "" then return nil end
   local ok, decoded = pcall(vim.json.decode, res.stdout)
   if not ok or type(decoded) ~= "table" or decoded.error then return nil end
@@ -54,10 +58,24 @@ end
 
 --- 送信先を決める
 ---@return string? pane_id, boolean has_agent, string reason, string? cwd
+local function has_agent_at(info)
+  return info ~= nil and info.agent ~= nil and info.agent ~= vim.NIL
+end
+
 function M.resolve_target()
+  -- ペイン一覧は先に引く。明示指定でも cwd とエージェントの有無を
+  -- ここから取れるようにするため（指定したときだけ絶対パスになり、
+  -- エージェントが居なくても agent send を使う、という食い違いを消す）。
+  local list = herdr_json({ "pane", "list" })
+  local panes = {}
+  if list and list.panes then
+    for _, p in ipairs(list.panes) do panes[p.pane_id] = p end
+  end
+
   local forced = vim.g.herdr_agent_target or vim.env.HERDR_AGENT_TARGET
   if forced and forced ~= "" then
-    return forced, true, "明示指定", nil
+    local info = panes[forced]
+    return forced, has_agent_at(info), "明示指定", info and info.cwd or nil
   end
 
   local me = self_pane()
@@ -65,34 +83,34 @@ function M.resolve_target()
     return nil, false, "HERDR_PANE_ID が無い（herdr の外で起動している）", nil
   end
 
-  local list = herdr_json({ "pane", "list" })
-  local panes, my_tab = {}, nil
-  if list and list.panes then
-    for _, p in ipairs(list.panes) do
-      panes[p.pane_id] = p
-      if p.pane_id == me then my_tab = p.tab_id end
-    end
-  end
+  local my_tab = panes[me] and panes[me].tab_id or nil
 
   -- 左隣のペイン。
   -- 注意: 戻り値の `pane_id` は問い合わせたペイン自身で、
   -- 実際の隣は `neighbor_pane_id`（隣が無い場合はこのキーごと存在しない）。
   local nb = herdr_json({ "pane", "neighbor", "--direction", "left", "--pane", me })
   local left = nb and nb.neighbor and nb.neighbor.neighbor_pane_id
-  if left and left ~= vim.NIL and left ~= "" and left ~= me then
-    local info = panes[left]
-    local has_agent = info ~= nil and info.agent ~= nil and info.agent ~= vim.NIL
-    return left, has_agent, "左隣のペイン", info and info.cwd or nil
+  if left == vim.NIL or left == "" or left == me then left = nil end
+
+  -- 左隣にエージェントが居るなら、それが本命
+  if left and has_agent_at(panes[left]) then
+    return left, true, "左隣のエージェント", panes[left].cwd
   end
 
-  -- 左隣が無ければ、同じタブ内のエージェント
+  -- 左隣がシェルなどの場合、同じタブのエージェントの方が意図に近い。
+  -- 左隣を無条件に優先すると、シェルへ文面が打ち込まれてしまう。
   if my_tab then
     for _, p in pairs(panes) do
-      if p.tab_id == my_tab and p.pane_id ~= me
-        and p.agent ~= nil and p.agent ~= vim.NIL then
+      if p.tab_id == my_tab and p.pane_id ~= me and has_agent_at(p) then
         return p.pane_id, true, "同じタブ内のエージェント", p.cwd
       end
     end
+  end
+
+  -- エージェントがどこにも居なければ、左隣へ素の文字列として送る
+  if left then
+    return left, false, "左隣のペイン（エージェント無し）",
+      panes[left] and panes[left].cwd or nil
   end
 
   return nil, false, "送信先のエージェントが見つからない", nil
@@ -111,7 +129,8 @@ local function send_to_pane(target, has_agent, text)
   table.insert(cmd, target)
   table.insert(cmd, text)
 
-  local res = vim.system(cmd, { text = true }):wait()
+  local ok, res = pcall(function() return vim.system(cmd, { text = true }):wait(TIMEOUT_MS) end)
+  if not ok or not res then return false, "herdr が応答しません" end
   if res.code ~= 0 then
     return false, (res.stderr or res.stdout or "不明なエラー")
   end
@@ -237,11 +256,29 @@ local function build(srow, erow, cwd, selection)
     table.insert(out, "選択: " .. selection)
   end
 
-  table.insert(out, "")
+  -- 末尾に空行を足さない。pane send-text ではそれが literal な Enter に
+  -- なり、「Enter は押さないので質問を書き足せる」という前提が崩れる。
   return table.concat(out, "\n")
 end
 
 -- ---- 送信の入口 ----
+
+--- 送る意味があるバッファか
+--- 無名バッファや特殊バッファは File も選択文字も無く、
+--- 受け取った側に打つ手が無い
+local function sendable()
+  local buf = vim.api.nvim_get_current_buf()
+  if vim.api.nvim_buf_get_name(buf) == "" then
+    vim.notify("保存されていないバッファは送れません", vim.log.levels.WARN)
+    return false
+  end
+  if vim.bo[buf].buftype ~= "" and not vim.wo[vim.api.nvim_get_current_win()].diff then
+    vim.notify("このバッファは送れません（通常のファイルか差分で使ってください）",
+      vim.log.levels.WARN)
+    return false
+  end
+  return true
+end
 
 local function deliver(srow, erow, selection, label)
   local target, has_agent, reason, cwd = M.resolve_target()
@@ -274,7 +311,40 @@ end
 ---   V      行単位   → 参照だけ（エージェントが読めるので十分）
 ---   v      文字単位 → 参照＋選んだ文字（行参照では表現できないため）
 ---   Ctrl-V 矩形     → 同上
+--- 選んだ文字を1行に収める
+---
+--- 複数行をただ空白でつなぐと、原文のどこにも無い文字列になる
+--- （インデントが連続空白として混ざり、行の境界も消える）。
+--- 区切りが分かる形にして、境界を保つ。
+--- タブは生のまま送らない。TUI の入力欄では補完キーとして解釈されうるうえ、
+--- 幅の計算でも8桁分を食って80桁の枠を無駄に使い切る。
+local function format_selection(lines)
+  if not lines or #lines == 0 then return nil end
+
+  local joined
+  if #lines == 1 then
+    joined = vim.trim((lines[1]:gsub("\t", " ")))
+  else
+    local parts = {}
+    for _, l in ipairs(lines) do
+      local t = vim.trim((l:gsub("\t", " ")))
+      if t ~= "" then table.insert(parts, t) end
+    end
+    joined = table.concat(parts, " / ")
+  end
+
+  if joined == "" then return nil end
+  -- 長すぎるものは行参照で足りるので添えない
+  if vim.fn.strwidth(joined) > 80 then return nil end
+  return joined
+end
+
 function M.send_selection()
+  if not sendable() then
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
+    return
+  end
+
   local mode = vim.fn.mode()
   if not mode:match("^[vV\22]") then mode = "v" end
 
@@ -283,16 +353,28 @@ function M.send_selection()
   local srow = math.min(vpos[2], cpos[2])
   local erow = math.max(vpos[2], cpos[2])
 
+  -- `$` で行末まで伸ばした矩形選択かどうか。
+  -- このとき curswant は v:maxcol になるが、getpos は curswant を運ばない
+  -- （getcurpos に替えても getregion の結果は変わらない）。
+  -- そのため getregion はカーソル桁で切ってしまい、
+  -- **ファイルのどこにも無い文字列**が出来上がる。自分で行末まで採る。
+  local to_eol = (mode == "\22")
+    and vim.fn.winsaveview().curswant == vim.v.maxcol
+
   local selection = nil
   if mode ~= "V" then
-    local ok, lines = pcall(vim.fn.getregion, vpos, cpos, { type = mode })
-    if ok and type(lines) == "table" and #lines > 0 then
-      local joined = vim.trim(table.concat(lines, " "))
-      -- 長すぎるものは行参照で足りるので添えない
-      if joined ~= "" and vim.fn.strdisplaywidth(joined) <= 80 then
-        selection = joined
+    local lines
+    if to_eol then
+      lines = {}
+      local from = math.min(vpos[3], cpos[3])
+      for l = srow, erow do
+        table.insert(lines, vim.fn.getline(l):sub(from))
       end
+    else
+      local ok, got = pcall(vim.fn.getregion, vpos, cpos, { type = mode })
+      if ok and type(got) == "table" then lines = got end
     end
+    selection = format_selection(lines)
   end
 
   vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
@@ -304,6 +386,7 @@ end
 
 --- ノーマルモード: 現在行を送る
 function M.send_location()
+  if not sendable() then return end
   local row = vim.fn.line(".")
   deliver(row, row, nil, ("%d行目"):format(row))
 end
