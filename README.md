@@ -443,7 +443,8 @@ right_click_passthrough_modifier = "ctrl" # Ctrl+右クリックを nvim に渡�
 3. 左隣が無ければ、同じタブ内のエージェント
 4. どれも無ければ**クリップボードにコピー**（herdr の外で使っても壊れない）
 
-送信先にエージェントが居れば `herdr agent send`、居なければ `herdr pane send-text` を使う。
+送信先のペインへ `herdr pane send-text` を使う。これは Enter を送らないため、
+エージェントの入力欄へ文面を置いた後に質問を書き足せる。旧・新両方の herdr に対応する。
 どちらも **Enter は押さない**ので、貼り付いた後に質問を書き足してから送信できる。
 
 ## ファイルツリーと差分パネルの使い分け

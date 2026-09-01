@@ -5,7 +5,7 @@
 -- 仕組み:
 --   herdr は各ペインに HERDR_PANE_ID を環境変数として注入している。
 --   そこから `herdr pane neighbor --direction left` で左隣（エージェント）を
---   特定し、`herdr agent send` で文脈を流し込む。
+--   特定し、`herdr pane send-text` で文脈を流し込む。
 --   Enter は送られないので、貼り付いた後に自分で質問を書き足せる。
 --
 -- 送るのは「参照」であってコードそのものではない:
@@ -158,11 +158,13 @@ local function send_to_pane(target, has_agent, text)
   local bin = herdr_bin()
   if not bin then return false, "herdr が見つからない" end
 
-  -- エージェントが居るペインなら agent send、そうでなければ pane send-text
-  local subcmd = has_agent and { "agent", "send" } or { "pane", "send-text" }
+  -- `agent send` は herdr 0.7.5 で廃止された。`pane send-text` は旧版・新版の
+  -- 両方にあり、Enter を送らずにペインの入力欄へ文面を置けるので常にこれを使う。
+  -- target は resolve_target が返す pane_id なので、agent 名への解決も不要。
+  local subcmd = { "pane", "send-text" }
 
   -- 末尾の改行は送り先で意味が変わる。
-  --   agent send    : 入力欄に改行が入るだけ。送信はされない。
+  --   pane send-text（Agent 宛て）: 入力欄に改行が入るだけ。送信はされない。
   --                   **付けないと、続けて送ったときに前の文面と行が繋がる**
   --                     Lines: 23【参照コード】
   --                   付けておけば次が新しい行から始まり、そのまま質問も書ける。
@@ -354,7 +356,7 @@ end
 ---   Ctrl-V 矩形     → 同上
 -- 選択に付ける上限。
 -- これは「入力欄を守るため」ではなく、事故を防ぐための最後の砦。
--- agent send は Enter を押さないので、長すぎたら入力欄で消せばよく、
+-- pane send-text は Enter を押さないので、長すぎたら入力欄で消せばよく、
 -- 送るかどうかを決めるのは受け取る側。
 -- 一方 minified なファイルは1行が数万文字あり、そこで v$ を押すと
 -- それが丸ごと流し込まれる。手書きのコードならまず届かない値にする。
@@ -534,7 +536,7 @@ vim.api.nvim_create_user_command("HerdrTarget", function()
   local target, has_agent, reason, cwd = M.resolve_target()
   if target then
     vim.notify(("送信先: %s\n判定理由: %s\n送信方法: %s\n相手の作業ディレクトリ: %s\n自ペイン: %s")
-      :format(target, reason, has_agent and "agent send" or "pane send-text",
+      :format(target, reason, "pane send-text",
         cwd or "(不明。絶対パスで送ります)", self_pane() or "(不明)"),
       vim.log.levels.INFO)
   else
