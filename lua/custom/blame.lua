@@ -103,18 +103,19 @@ end
 --- 同じバッファを複数の窓で開いている場合は**いちばん狭い窓**に合わせる。
 --- extmark はバッファに付くので窓ごとに変えられない。広い方に合わせると
 --- 狭い窓ではみ出して読めなくなるため、収まる側を採る。
+---@return integer width, integer? win 幅と、その幅を持つ窓
 local function text_width(buf)
-  local best = nil
+  local best, best_win = nil, nil
   for _, w in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_get_buf(w) == buf then
       local info = vim.fn.getwininfo(w)[1]
       if info then
         local usable = info.width - (info.textoff or 0)
-        if not best or usable < best then best = usable end
+        if not best or usable < best then best, best_win = usable, w end
       end
     end
   end
-  return best or vim.o.columns
+  return best or vim.o.columns, best_win
 end
 
 local function render(buf)
@@ -124,7 +125,7 @@ local function render(buf)
 
   -- right_align は幅が足りないと**コードに被さる**。
   -- 行ごとに「その行のコードを書いた残り」を計算して、そこへ収める。
-  local avail_total = text_width(buf)
+  local avail_total, target_win = text_width(buf)
   local total = vim.api.nvim_buf_line_count(buf)
   local prev = nil
   for i = 1, total do
@@ -135,10 +136,18 @@ local function render(buf)
     end
     if show then
       local line = vim.api.nvim_buf_get_lines(buf, i - 1, i, false)[1] or ""
-      -- NUL を含む行は Vim 側で Blob 扱いになり strdisplaywidth が E976 で落ちる。
-      -- 描画全体が止まると set_keymaps まで届かず「表示だけモード中」になるので、
-      -- ここで受け止めてバイト数で代用する。
-      local okw, code_w = pcall(vim.fn.strdisplaywidth, line)
+      -- コードの幅はタブを数える必要があるので strdisplaywidth を使う。
+      -- ただしこの関数は**現在窓**の折り返し設定に依存するため、
+      -- 別の窓（マークダウン等）にカーソルがあると値が膨らみ、
+      -- 注釈が黙って消える。対象の窓の文脈で測る。
+      -- NUL を含む行は Blob 扱いになり E976 で落ちるので受け止める。
+      local okw, code_w
+      if target_win and vim.api.nvim_win_is_valid(target_win) then
+        okw, code_w = pcall(vim.api.nvim_win_call, target_win,
+          function() return vim.fn.strdisplaywidth(line) end)
+      else
+        okw, code_w = pcall(vim.fn.strdisplaywidth, line)
+      end
       if not okw then code_w = #line end
       -- コードの幅 + 2桁の余白 を空けた残りに収める
       local room = avail_total - code_w - 2
@@ -197,16 +206,32 @@ end
 --- 基準がずれて一致せず、結果が空になる。
 ---@return string[] shas, table<string,string> paths
 local function file_commits(dir, abs_file)
-  local r = vim.system({ "git", "-C", dir, "log", "--follow",
-    "--format=%H", "--name-only", "--", abs_file }, { text = true }):wait()
+  -- -z を付けて NUL 区切りで受ける。
+  -- 付けないと非ASCII・引用符・バックスラッシュを含むパスが
+  -- C形式でクォートされて返り（"\346\227\245..."）、
+  -- そのまま渡すと存在しないパスになって差分が無言で空になる。
+  --
+  -- --diff-merges=first-parent を付けないとマージコミットが履歴から
+  -- 落ちる。コンフリクト解消でその行を変えたコミットが「履歴に無い」と
+  -- 扱われ、前後移動が使えなくなっていた。
+  local r = vim.system({ "git", "-C", dir, "log", "--follow", "-z",
+    "--diff-merges=first-parent", "--format=%H", "--name-only", "--", abs_file },
+    { text = true }):wait()
   if r.code ~= 0 then return {}, {} end
+
   local shas, paths, cur = {}, {}, nil
-  for _, l in ipairs(vim.split(r.stdout or "", "\n")) do
-    if #l == 40 and l:match("^%x+$") then
-      cur = l
-      table.insert(shas, l)
-    elseif cur and l ~= "" and not paths[cur] then
-      paths[cur] = l -- そのコミット時点でのパス
+  for _, tok in ipairs(vim.split(r.stdout or "", "\0", { plain = true })) do
+    if tok ~= "" then
+      -- -z では sha の直後のパスが改行始まりで来る。
+      -- 改行で始まるものはパス、そうでなければ sha。
+      -- （40桁hexのファイル名を sha と誤判定する問題もこれで消える）
+      local path = tok:match("^\n(.+)$")
+      if path then
+        if cur and not paths[cur] then paths[cur] = path end
+      else
+        cur = vim.trim(tok)
+        if cur ~= "" then table.insert(shas, cur) end
+      end
     end
   end
   return shas, paths
@@ -220,20 +245,26 @@ local function show(sha, summary, pos)
   -- ただし閉じると DiffviewViewClosed が飛んで nav が捨てられてしまうので、
   -- 切り替え中であることを立てておく。
   switching = true
-  local ok, lib = pcall(require, "diffview.lib")
-  if ok and lib.views and #lib.views > 0 then pcall(vim.cmd, "DiffviewClose") end
+  -- 前に開いた差分を閉じる。DiffviewClose を直に叩くと現在タブしか
+  -- 閉じないため、gf で通常タブへ移った後などに空振りし、
+  -- 開くたびにタブが積み上がっていた。
+  local okd, dv = pcall(require, "custom.diffview_util")
+  if okd then dv.close() end
   -- リポジトリを -C で明示する。DiffviewOpen の相対パスは **nvim の cwd**
   -- 基準で解決されるので、リポジトリの下位ディレクトリから nvim を起動して
   -- いるだけで一致せず、エラーも出ないまま空の差分が開く。
   -- パスはそのコミット時点のもの（リネーム前は昔の名前）を使う。
-  local path = nav.paths[sha] or nav.rel
+  -- nav をローカルに掴んでおく。DiffviewOpen の最中にイベントループが
+  -- 回り、その間に外から nav が差し替わっても落ちないようにする。
+  local ctx = nav
+  local path = ctx.paths[sha] or ctx.rel
   local cmd = "DiffviewOpen "
-  if nav.root then cmd = cmd .. "-C" .. vim.fn.fnameescape(nav.root) .. " " end
+  if ctx.root then cmd = cmd .. "-C" .. vim.fn.fnameescape(ctx.root) .. " " end
   vim.cmd(cmd .. ("%s^! -- %s"):format(sha, vim.fn.fnameescape(path)))
 
   -- どのタブで開いたかを覚える。無関係な差分を「ブレイムの差分」と
   -- 取り違えないための目印にする。
-  nav.tabpage = vim.api.nvim_get_current_tabpage()
+  ctx.tabpage = vim.api.nvim_get_current_tabpage()
 
   -- 1ファイルしか見ていないので、左のファイル一覧は場所の無駄。
   -- 隠すと差分が全幅に広がって読みやすくなる。
@@ -251,17 +282,18 @@ end
 --- 履歴移動が有効か、いま何番目かを返す（フッターが参照する）
 --- DiffviewViewClosed のイベントだけに頼ると閉じ方によって取りこぼすので、
 --- 「差分が実際に開いているか」を毎回見て自己修復する。
+--- **この関数は状態を変えない。**
+--- フッターが再描画のたびに呼ぶので、ここで nav を捨てると
+--- 「差分を開き直している最中の一瞬」に捨てられ、直後の処理が
+--- nil を掴んで落ちる（[h の連打で復帰不能になっていた）。
+--- 破棄は DiffviewViewClosed とタブの消滅だけに任せる。
 function M.nav_state()
   if not nav then return nil end
   if switching then return { idx = nav.idx, total = #nav.commits } end
   local ok, lib = pcall(require, "diffview.lib")
-  if not (ok and lib.views and #lib.views > 0) then
-    nav = nil
-    return nil
-  end
-  -- 開いていた差分タブが無くなったなら、この文脈はもう死んでいる。
+  if not (ok and lib.views and #lib.views > 0) then return nil end
+  -- 開いていた差分タブが無くなったなら、この文脈はもう使えない
   if not (nav.tabpage and vim.api.nvim_tabpage_is_valid(nav.tabpage)) then
-    nav = nil
     return nil
   end
   -- 別のタブに居る間は出さない。

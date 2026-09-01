@@ -60,7 +60,10 @@ local function actions()
         if not ok then vim.notify("差分表示の中で使えます", vim.log.levels.WARN) end
       end },
     { name = "差分を閉じる", en = "close diff", key = "Space dc",
-      run = function() vim.cmd("DiffviewClose") end },
+      run = function()
+        local n = require("custom.diffview_util").close()
+        if n == 0 then vim.notify("差分は開いていません", vim.log.levels.INFO) end
+      end },
 
     -- ---- 探す ----
     { name = "ファイル名で探す", en = "go to file quick open find file", key = "Ctrl+p",
@@ -194,7 +197,7 @@ function M.open()
         format = function(item)
           local ret = { { " " .. item.name, "SnacksPickerLabel" } }
           if item.key ~= "" then
-            local pad = math.max(1, 46 - vim.fn.strdisplaywidth(item.name))
+            local pad = math.max(1, 46 - vim.fn.strwidth(item.name))
             ret[#ret + 1] = { string.rep(" ", pad) .. item.key, "SnacksPickerComment" }
           end
           return ret

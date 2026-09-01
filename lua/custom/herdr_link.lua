@@ -439,10 +439,18 @@ function M.send_selection()
   if mode ~= "V" then
     local lines
     if to_eol then
+      -- getpos が返すのは**バイト桁**。矩形選択の桁は**表示桁**なので、
+      -- そのまま全行に当てると多バイト文字やタブの分だけずれ、
+      -- 文字の途中で切って壊れた UTF-8 を送ってしまう。
+      -- 一度表示桁に直し、行ごとにバイト桁へ戻す。
+      local function startcol(pos)
+        local r = vim.fn.virtcol({ pos[2], pos[3] }, 1)
+        return type(r) == "table" and r[1] or r
+      end
+      local vc = math.min(startcol(vpos), startcol(cpos))
       lines = {}
-      local from = math.min(vpos[3], cpos[3])
       for l = srow, erow do
-        table.insert(lines, vim.fn.getline(l):sub(from))
+        table.insert(lines, vim.fn.getline(l):sub(vim.fn.virtcol2col(0, l, vc)))
       end
     else
       local ok, got = pcall(vim.fn.getregion, vpos, cpos, { type = mode })

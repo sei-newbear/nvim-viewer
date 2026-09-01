@@ -7,11 +7,17 @@ return {
     dependencies = { "nvim-lua/plenary.nvim", "nvim-tree/nvim-web-devicons" },
     cmd = { "DiffviewOpen", "DiffviewFileHistory", "DiffviewClose", "DiffviewToggleFiles" },
     keys = {
-      { "<leader>dd", "<cmd>DiffviewOpen<CR>",                desc = "差分を開く (作業ツリー)" },
+      -- 既に開いていればそのタブへ移る。押すたびに同じ差分が
+      -- 二重に開くのを防ぐ（ツールバーの「差分」ボタンと挙動を揃える）。
+      { "<leader>dd", function()
+          if not require("custom.diffview_util").focus_existing() then
+            vim.cmd("DiffviewOpen")
+          end
+        end, desc = "差分を開く (作業ツリー)" },
       { "<leader>dm", "<cmd>DiffviewOpen origin/main...HEAD<CR>", desc = "差分を開く (vs origin/main)" },
       { "<leader>dh", "<cmd>DiffviewFileHistory %<CR>",       desc = "このファイルの履歴" },
       { "<leader>dH", "<cmd>DiffviewFileHistory<CR>",         desc = "リポジトリの履歴" },
-      { "<leader>dc", "<cmd>DiffviewClose<CR>",               desc = "差分を閉じる" },
+      { "<leader>dc", "<cmd>DiffviewCloseAll<CR>",            desc = "差分を閉じる" },
     },
     opts = function()
       local actions = require("diffview.actions")

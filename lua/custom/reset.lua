@@ -57,12 +57,11 @@ function M.reset(opts)
   local closed = { diff = 0, picker = 0, float = 0, tab = 0, win = 0, buf = 0 }
 
   -- 1) 差分ビューを閉じる（自前のタブページを持つので最初に処理する）
-  local ok, lib = pcall(require, "diffview.lib")
-  if ok and lib.views then
-    for _ = 1, #lib.views do
-      if pcall(vim.cmd, "DiffviewClose") then closed.diff = closed.diff + 1 end
-    end
-  end
+  -- どのタブから呼ばれても閉じられるヘルパーを使う。
+  -- DiffviewClose を直に叩くと現在タブしか閉じず、
+  -- 閉じられなかったものまで「閉じた」と数えてしまう。
+  local okd, dv = pcall(require, "custom.diffview_util")
+  if okd then closed.diff = dv.close() end
 
   -- 2) ピッカー・ツリーを閉じる
   local ok_s, Snacks = pcall(require, "snacks")

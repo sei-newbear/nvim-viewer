@@ -140,7 +140,7 @@ local function build()
     add("  " .. heading, "Function")
     for _, row in ipairs(rows) do
       local key, desc = row[1], row[2]
-      local pad = string.rep(" ", math.max(1, KEY_WIDTH - vim.fn.strdisplaywidth(key)))
+      local pad = string.rep(" ", math.max(1, KEY_WIDTH - vim.fn.strwidth(key)))
       local text = "    " .. key .. pad .. desc
       add(text)
       -- キー部分だけ色を変える
@@ -170,7 +170,8 @@ function M.open()
 
   local width = 0
   for _, l in ipairs(lines) do
-    width = math.max(width, vim.fn.strdisplaywidth(l))
+    -- strdisplaywidth は現在窓の折り返し設定に依存する。UI の幅は strwidth。
+    width = math.max(width, vim.fn.strwidth(l))
   end
   width = math.min(width + 4, vim.o.columns - 4)
   local height = math.min(#lines, vim.o.lines - 6)

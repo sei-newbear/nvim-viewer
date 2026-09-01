@@ -82,7 +82,10 @@ function M.render()
   if not path then return "" end
 
   local width = vim.api.nvim_win_get_width(win) - 2
-  return "%#Comment# " .. shorten(path, math.max(8, width)) .. " "
+  -- winbar の戻り値は書式文字列として再解釈される。パスに % があると
+  -- statusline の項目（%d や %b）として食われるので、必ずエスケープする。
+  local shown = shorten(path, math.max(8, width)):gsub("%%", "%%%%")
+  return "%#Comment# " .. shown .. " "
 end
 
 --- ウィンドウにパンくずを付ける（他が使っている場合は触らない）

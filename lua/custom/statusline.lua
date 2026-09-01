@@ -74,14 +74,12 @@ local ITEMS = {
     run = function() require("custom.blame").nav_commit(-1) end },
   { label = "閉じる", key = "q", prio = 96, when = in_blame_nav,
     run = function()
-      -- DiffviewClose は「今いるタブのビュー」を閉じる。
-      -- 別のタブから押されても閉じられるようにしておく。
-      local ok, lib = pcall(require, "diffview.lib")
-      local v = ok and lib.views and lib.views[1]
-      if v and v.tabpage and vim.api.nvim_tabpage_is_valid(v.tabpage) then
-        pcall(vim.api.nvim_set_current_tabpage, v.tabpage)
-      end
-      pcall(vim.cmd, "DiffviewClose")
+      -- 今いるタブの差分を閉じる。lib.views[1] を決め打ちすると
+      -- 別の差分（作業ツリー差分など）を閉じてしまう。
+      local okd, dv = pcall(require, "custom.diffview_util")
+      if not okd then return end
+      local here = dv.view_at(vim.api.nvim_get_current_tabpage())
+      dv.close(here)
     end },
 
   -- 差分から実ファイルへ。「差分→全体→定義」の流れの要なので最優先。
