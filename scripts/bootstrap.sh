@@ -84,6 +84,13 @@ head_ "1. 前提ツールの確認"
 for c in git curl; do
   has "$c" && skip "$c" || warn "$c が無い。先に入れてください"
 done
+# git が無いとプラグインもパーサーも取得できない。
+# 続けても「導入できた」と嘘の報告をするだけなので、ここで止める。
+if ! has git; then
+  printf '\n  git が無いため続行できません（プラグインの取得に必要です）。\n'
+  printf '  中断しました。\n\n'
+  exit 1
+fi
 
 if ! has mise; then
   warn "mise が無い。https://mise.jdx.dev/ を見て入れるか、neovim を自分で用意してください"
@@ -163,16 +170,28 @@ if has npm; then
       || warn "mermaid-cli / marked の導入に失敗"
   fi
 
-  # ブラウザ描画用のライブラリを、node のバージョンに依存しない場所へ複製する
+  # ブラウザ描画用のライブラリを、node のバージョンに依存しない場所へ複製する。
+  #
+  # 置き場所を決め打ちにしてはいけない。npm はバージョンによって依存を
+  # 巻き上げたり巻き上げなかったりする。実際 mermaid は
+  #   <root>/mermaid/dist/…                              （巻き上げられた場合）
+  #   <root>/@mermaid-js/mermaid-cli/node_modules/mermaid/dist/… （されない場合）
+  # の両方があり、直下だけを見ていると**永久に複製できず**、
+  # 「入れ直してください」と案内しても直らない状態になる。
   mkdir -p "$LIB_DIR"
   NM="$(npm root -g 2>/dev/null)"
-  copied=0
   for pair in "mermaid/dist/mermaid.min.js:mermaid.min.js" "marked/lib/marked.umd.js:marked.umd.js"; do
-    src="$NM/${pair%%:*}"; dst="$LIB_DIR/${pair##*:}"
-    if [ -f "$src" ]; then cp "$src" "$dst"; copied=$((copied+1)); fi
+    rel="${pair%%:*}"; dst="$LIB_DIR/${pair##*:}"
+    src="$(find "$NM" -maxdepth 6 -path "*/$rel" -print -quit 2>/dev/null)"
+    [ -n "$src" ] && cp "$src" "$dst"
   done
-  [ "$copied" = 2 ] && ok "描画ライブラリを $LIB_DIR に複製" \
-                    || warn "描画ライブラリの複製に失敗（$copied/2）。Space o が動きません"
+  # 判定は「コピーした本数」ではなく「使える状態か」で行う。
+  # 既に置いてあって機能している場合に失敗と報告しないため。
+  if [ -s "$LIB_DIR/mermaid.min.js" ] && [ -s "$LIB_DIR/marked.umd.js" ]; then
+    ok "描画ライブラリを $LIB_DIR に用意"
+  else
+    warn "描画ライブラリが見つかりません。Space o（ブラウザ表示）が動きません"
+  fi
 fi
 
 # -------------------------------------------------------------------
@@ -204,8 +223,18 @@ if has nvim; then
   # 「どのマシンでも同じ版が入る」「勝手に更新されない」という利点は
   # restore を使って初めて成立する。
   nvim --headless "+Lazy! install" +qa >/dev/null 2>&1
-  nvim --headless "+Lazy! restore" +qa >/dev/null 2>&1 \
-    && ok "プラグインをロック通りに導入" || warn "プラグインの導入に失敗"
+  nvim --headless "+Lazy! restore" +qa >/dev/null 2>&1
+  # 終了コードは当てにならない（init.lua が落ちても 0 を返す）。
+  # 実際に入った数を数えて判定する。
+  pn=$(nvim --headless -c 'lua
+local ok, cfg = pcall(require, "lazy.core.config")
+io.stderr:write(("\nVIEWER_PLUGINS=%d\n"):format(ok and vim.tbl_count(cfg.plugins) or 0))
+vim.cmd("qa!")' 2>&1 | grep -o 'VIEWER_PLUGINS=[0-9]*' | tail -1 | cut -d= -f2)
+  if [ "${pn:-0}" -ge 8 ]; then
+    ok "プラグイン $pn 個をロック通りに導入"
+  else
+    warn "プラグインの導入に失敗（$pn 個しか読み込めていません）"
+  fi
 
   echo "  パーサーを導入中（数分かかります）..."
   # 一覧は lua/core/parsers.lua が持つ。ここに書き写すとズレるので読む。
@@ -217,16 +246,27 @@ if not ok2 then vim.cmd("qa!") end
 local h = ts.install(want)
 if h and h.wait then h:wait(900000) end
 vim.cmd("qa!")' >/dev/null 2>&1
-  n=$(nvim --headless -c 'lua
-local ok, ts = pcall(require, "nvim-treesitter")
-io.stderr:write(ok and tostring(#ts.get_installed()) or "0")
-vim.cmd("qa!")' 2>&1 | tail -1)
-  want_n=$(nvim --headless -c 'lua
-local ok, l = pcall(require, "core.parsers")
-io.stderr:write(ok and tostring(#l) or "0")
-vim.cmd("qa!")' 2>&1 | tail -1)
-  [ "${n:-0}" -ge "${want_n:-20}" ] && ok "パーサー $n 件を導入" \
-    || warn "パーサーが $n 件しか入っていない（${want_n:-?} 件を想定）"
+  # 件数は目印付きで出して grep で拾う。
+  # nvim-treesitter は導入の進捗を非同期で stderr に流すので、
+  # `tail -1` では**その進捗行を掴んでしまい**、初回だけ判定が壊れる。
+  counts=$(nvim --headless -c 'lua
+local okt, ts = pcall(require, "nvim-treesitter")
+local okl, want = pcall(require, "core.parsers")
+local have = {}
+if okt then for _, x in ipairs(ts.get_installed()) do have[x] = true end end
+local miss = 0
+if okl then for _, x in ipairs(want) do if not have[x] then miss = miss + 1 end end end
+io.stderr:write(("\nVIEWER_PARSERS=%d VIEWER_WANT=%d VIEWER_MISSING=%d\n"):format(
+  okt and #ts.get_installed() or 0, okl and #want or 0, miss))
+vim.cmd("qa!")' 2>&1 | grep -o 'VIEWER_PARSERS=[0-9]* VIEWER_WANT=[0-9]* VIEWER_MISSING=[0-9]*' | tail -1)
+  n=$(echo "$counts"    | grep -o 'VIEWER_PARSERS=[0-9]*'  | cut -d= -f2)
+  want_n=$(echo "$counts" | grep -o 'VIEWER_WANT=[0-9]*'   | cut -d= -f2)
+  miss=$(echo "$counts"   | grep -o 'VIEWER_MISSING=[0-9]*' | cut -d= -f2)
+  if [ "${miss:-1}" = "0" ] && [ "${want_n:-0}" != "0" ]; then
+    ok "パーサー $want_n 件を導入（導入済み合計 $n 件）"
+  else
+    warn "パーサーが揃っていません（不足 ${miss:-?} 件 / 想定 ${want_n:-?} 件）"
+  fi
 fi
 
 # -------------------------------------------------------------------
