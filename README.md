@@ -129,7 +129,7 @@ nvim-viewer <ファイル or ディレクトリ>
 | `Space o` | **マークダウンをブラウザで開く（mermaid を図で描画）** |
 | `Space m` | **整形表示 ⇄ 生ファイル** を切り替え |
 | `Space y` | 現在位置 `path:line` をコピー |
-| `Space q` / `Space Q` | ウィンドウを閉じる / Neovim終了 |
+| `Space q` / `Space Q` | ウィンドウを閉じる（最後の1つは閉じない） / Neovim終了（確認あり） |
 
 ## 散らかったら `Space 0`
 

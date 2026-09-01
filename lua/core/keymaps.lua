@@ -51,8 +51,27 @@ map("n", "]c", "]c", { desc = "次の差分ハンク" })
 map("n", "[c", "[c", { desc = "前の差分ハンク" })
 
 -- 終了系（ビューアーなので気軽に閉じられるように）
-map("n", "<leader>q", "<cmd>quit<CR>", { desc = "ウィンドウを閉じる" })
-map("n", "<leader>Q", "<cmd>qall!<CR>", { desc = "Neovimを終了" })
+-- `Space q` は「ウィンドウを閉じる」と案内しているが、窓が1つのときは
+-- :quit が Neovim ごと終わらせてしまう。隣の `Space Q`（終了）と
+-- 大小の違いしかないのに、片方だけ取り返しがつかない状態だった。
+-- 窓が1つなら閉じずに、そう伝える。
+map("n", "<leader>q", function()
+  local wins = vim.tbl_filter(function(w)
+    return vim.api.nvim_win_get_config(w).relative == ""
+  end, vim.api.nvim_tabpage_list_wins(0))
+  if #wins <= 1 and #vim.api.nvim_list_tabpages() <= 1 then
+    vim.notify("これが最後のウィンドウです（終了は Space Q）", vim.log.levels.INFO)
+    return
+  end
+  vim.cmd("quit")
+end, { desc = "ウィンドウを閉じる" })
+
+map("n", "<leader>Q", function()
+  vim.ui.select({ "いいえ", "はい" }, { prompt = "Neovim を終了しますか？" },
+    function(choice)
+      if choice == "はい" then vim.cmd("qall!") end
+    end)
+end, { desc = "Neovimを終了" })
 
 -- 行番号つきでファイル位置をコピー（エージェントに伝える用）
 map("n", "<leader>y", function()

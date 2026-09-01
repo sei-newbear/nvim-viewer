@@ -81,7 +81,25 @@ vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile", "BufWinEnter" }, {
     if not vim.api.nvim_buf_is_valid(bufnr) then return end
     if should_lock(bufnr) then
       vim.bo[bufnr].modifiable = false
-      vim.bo[bufnr].readonly = true
+      -- readonly は付けない。
+      -- 付けると `:w` が E45（英語）で弾かれ、しかも
+      -- `add ! to override` という**実際には効かない案内**が出る。
+      -- 保存は下の BufWriteCmd が日本語で説明して受け止める。
+      vim.bo[bufnr].readonly = false
+
+      -- 編集しようとしたときに、この道具の前提を日本語で伝える。
+      -- 何も出さないと E21 という英語の内部エラーしか見えず、
+      -- 「編集はエージェントに頼む」という一番大事な前提が伝わらない。
+      local function explain()
+        vim.notify("このビューアーは編集しません。修正は左ペインのエージェントへ依頼してください",
+          vim.log.levels.INFO)
+      end
+      for _, k in ipairs({ "i", "I", "a", "A", "o", "O", "c", "C", "s", "S",
+                           "x", "X", "d", "D", "p", "P", "r", "R", "u", "J" }) do
+        vim.keymap.set("n", k, explain,
+          { buffer = bufnr, silent = true, desc = "閲覧専用（編集はエージェントへ）" })
+      end
+
       -- ビューアーにマクロ記録は不要。誤って q を押して "recording @x" に
       -- 入ってしまう事故を防ぐ（help や quickfix の q は従来どおり残す）
       vim.keymap.set("n", "q", "<Nop>", { buffer = bufnr, desc = "マクロ記録を無効化" })
@@ -94,7 +112,7 @@ vim.api.nvim_create_autocmd("BufWriteCmd", {
   group = readonly_group,
   pattern = "*",
   callback = function()
-    vim.notify("ビューアーモードのため保存できません（編集は左ペインのエージェントへ依頼してください）",
+    vim.notify("このビューアーは保存しません。修正は左ペインのエージェントへ依頼してください",
       vim.log.levels.WARN)
   end,
 })
