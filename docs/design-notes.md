@@ -113,7 +113,7 @@ mise ls 2>/dev/null
 
 ```sh
 git clone <repo> ~/.config/nvim-viewer
-NVIM_APPNAME=nvim-viewer ~/.config/nvim-viewer/scripts/bootstrap.sh
+~/.config/nvim-viewer/scripts/bootstrap.sh
 ```
 
 | | 設定 | プラグイン |

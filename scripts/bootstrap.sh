@@ -3,7 +3,7 @@
 # 新しいマシンでこの設定を動かすための初期化スクリプト
 #
 #   git clone <repo> ~/.config/nvim-viewer
-#   NVIM_APPNAME=nvim-viewer ~/.config/nvim-viewer/scripts/bootstrap.sh
+#   ~/.config/nvim-viewer/scripts/bootstrap.sh
 #
 # 既存の nvim があるかどうかに関わらず、この形で入れる。
 # ~/.config/nvim には触れないので、既存の設定は壊れず、
@@ -27,10 +27,29 @@ LIB_DIR="$HOME/.local/share/nvim-md-preview"
 PUPPETEER_JSON="$NVIM_DIR/mermaid-puppeteer.json"
 
 # nvim は $XDG_CONFIG_HOME/$NVIM_APPNAME を設定として読む（既定は nvim）。
-# 別名にすると設定もプラグインも既存環境と分かれるので、
-# 既に nvim を使っているマシンにはこちらで入れる。
-APPNAME="${NVIM_APPNAME:-nvim}"
-export NVIM_APPNAME   # 以降で呼ぶ nvim にも引き継ぐ
+#
+# その名前は **自分が置かれている場所から分かる**ので、人に打たせない。
+# ~/.config/nvim-viewer/scripts/bootstrap.sh として動いているなら
+# 答えは nvim-viewer。打ち間違いで壊れる余地も消える。
+# 明示的に NVIM_APPNAME が指定されていればそちらを尊重する。
+XDG_CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
+if [ -n "${NVIM_APPNAME:-}" ]; then
+  APPNAME="$NVIM_APPNAME"
+elif [ "$(dirname "$NVIM_DIR")" = "$(cd "$XDG_CFG" 2>/dev/null && pwd -P || echo "$XDG_CFG")" ]; then
+  APPNAME="$(basename "$NVIM_DIR")"
+else
+  # 設定ディレクトリの直下に無い（symlink 経由など）。
+  # その場合は $XDG_CONFIG_HOME の各項目から実体が一致するものを探す。
+  APPNAME="nvim"
+  for d in "$XDG_CFG"/*; do
+    [ -d "$d" ] || continue
+    if [ "$(cd "$d" 2>/dev/null && pwd -P)" = "$NVIM_DIR" ]; then
+      APPNAME="$(basename "$d")"
+      break
+    fi
+  done
+fi
+export NVIM_APPNAME="$APPNAME"   # 以降で呼ぶ nvim にも引き継ぐ
 # 起動コマンドの名前は導入先によらず常に同じにする。
 # 配布したときに「どちらで入れたか」を聞かないと
 # 起動方法を案内できない、という状態を避けるため。
@@ -54,11 +73,11 @@ head_ "0. 置き場所の確認"
 EXPECTED="${XDG_CONFIG_HOME:-$HOME/.config}/$APPNAME"
 if [ "$NVIM_DIR" != "$(cd "$EXPECTED" 2>/dev/null && pwd -P || echo "")" ]; then
   printf '  \033[33m!\033[0m このリポジトリは %s にあります\n' "$NVIM_DIR"
-  printf '    NVIM_APPNAME=%s なので、nvim が読むのは %s です。\n' "$APPNAME" "$EXPECTED"
+  printf '    このスクリプトは %s 用と判断しました（読む場所は %s）。\n' "$APPNAME" "$EXPECTED"
   printf '    そこへ clone し直すか、symlink を張ってから実行してください。\n\n'
   printf '    推奨の入れ方（既存の nvim の有無に関わらず同じ）:\n'
   printf '      git clone <repo> ~/.config/nvim-viewer\n'
-  printf '      NVIM_APPNAME=nvim-viewer ~/.config/nvim-viewer/scripts/bootstrap.sh\n\n'
+  printf '      ~/.config/nvim-viewer/scripts/bootstrap.sh\n\n'
   printf '    中断しました。\n'
   exit 1
 fi

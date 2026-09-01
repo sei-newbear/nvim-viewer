@@ -10,7 +10,7 @@ git clone git@github.com:sei-newbear/nvim-viewer.git ~/.config/nvim-viewer
 # していない場合
 git clone https://github.com/sei-newbear/nvim-viewer.git ~/.config/nvim-viewer
 
-NVIM_APPNAME=nvim-viewer ~/.config/nvim-viewer/scripts/bootstrap.sh
+~/.config/nvim-viewer/scripts/bootstrap.sh
 nvim-viewer
 ```
 
@@ -42,6 +42,9 @@ nvim-viewer
 起動は `bootstrap.sh` が用意する `~/.local/bin/nvim-viewer` から行う
 （中身は `exec env NVIM_APPNAME="nvim-viewer" nvim "$@"` の1行）。
 `~/.local/bin` が PATH に無ければ警告が出る。
+
+`NVIM_APPNAME` を自分で打つ必要はない。**どこに clone したかで決まる**ので、
+`bootstrap.sh` が置き場所から判断する（symlink 経由でも実体を辿る）。
 
 ---
 
