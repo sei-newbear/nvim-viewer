@@ -99,6 +99,16 @@ local function opener()
   return nil
 end
 
+--- ファイルパスを file:// の URL にする
+--- HTML エスケープだけでは足りない。`#` や `?` はそのままだとフラグメント・
+--- クエリとして扱われ、相対パスの解決先が**別のディレクトリ**になる。
+--- `%41` のような並びも実際に別のファイルを読みに行ってしまう。
+local function path_to_url(p)
+  return "file://" .. (p:gsub("[^%w%-%._~/]", function(c)
+    return ("%%%02X"):format(c:byte())
+  end))
+end
+
 --- HTML に流し込む値を安全にする
 --- テンプレートは属性値の中にも埋めるので、引用符まで潰しておく
 local function esc_html(t)
@@ -174,8 +184,8 @@ function M.open(buf)
   local vals = {
     TITLE  = esc_html(name),
     -- 相対パスの画像リンクが解決できるよう base を元ファイルの場所にする
-    BASE   = esc_html("file://" .. dir .. "/"),
-    LIB    = esc_html("file://" .. LIB_DIR),
+    BASE   = esc_html(path_to_url(dir) .. "/"),
+    LIB    = esc_html(path_to_url(LIB_DIR)),
     FOOTER = esc_html(abs ~= "" and abs or "（保存されていないバッファ）"),
     MD_B64 = vim.base64.encode(md),
     NONCE  = nonce,
@@ -185,6 +195,14 @@ function M.open(buf)
   -- 同じファイルは同じ出力先に書く（タブが無限に増えないように）
   local key = vim.fn.sha256(abs ~= "" and abs or tostring(buf)):sub(1, 12)
   local out = ("%s/nvim-md-preview-%s.html"):format(vim.fn.stdpath("cache"), key)
+  -- 先に空ファイルを 0600 で作ってから書く。
+  -- writefile は umask に従うので、そのまま書くと一瞬 0664 になる窓ができる。
+  -- 中身はマークダウン全文なので、その窓を作らない。
+  if not vim.uv.fs_stat(out) then
+    local fd = vim.uv.fs_open(out, "w", tonumber("600", 8))
+    if fd then vim.uv.fs_close(fd) end
+  end
+  protect(out)
   vim.fn.writefile(vim.split(html, "\n"), out)
   protect(out)
   sweep()

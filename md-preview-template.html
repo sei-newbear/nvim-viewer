@@ -208,7 +208,28 @@
   }
 
   // マークダウンを描画
-  document.getElementById('content').innerHTML = marked.parse(split.body, { gfm: true, breaks: false });
+  // 本文の HTML は、**文書に入れる前に**危険な要素を落とす。
+  //
+  // innerHTML へ代入した時点でブラウザは中身を処理し始める。
+  // 特に <meta http-equiv="refresh"> は入れた瞬間に遷移が予約されるので、
+  // 後から取り除いても間に合わない（実際に CSP ごと迂回された）。
+  // <template> の中は文書として動かないので、そこで組み立ててから移す。
+  var tpl = document.createElement('template');
+  tpl.innerHTML = marked.parse(split.body, { gfm: true, breaks: false });
+
+  (function stripDangerous(root) {
+    var sel = 'meta,base,script,iframe,frame,frameset,object,embed,applet,form,link,noscript';
+    root.querySelectorAll(sel).forEach(function (el) { el.remove(); });
+    // イベント属性も落とす（CSP でも止まるが、二重にしておく）
+    root.querySelectorAll('*').forEach(function (el) {
+      for (var i = el.attributes.length - 1; i >= 0; i--) {
+        var n = el.attributes[i].name;
+        if (n.slice(0, 2).toLowerCase() === 'on') el.removeAttribute(n);
+      }
+    });
+  })(tpl.content);
+
+  document.getElementById('content').appendChild(tpl.content);
 
   // --- 通常なら消える要素を可視化する ---
   // HTMLコメントはブラウザでは見えないので、囲って見せる。
