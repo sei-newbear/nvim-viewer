@@ -63,7 +63,7 @@ herdr（ターミナルマルチプレクサ）の **左ペインにコーディ
 - **sudo を使わない。** 必要ならコマンドをユーザーに提示して手動実行を依頼する。
   実績として本構成は**全て sudo なしで導入できた**（mise / npm / go install）。
 - **既存環境を壊さない。** ただし `bootstrap.sh` はバックアップを取らない。
-  実際の防御は「置き場所が想定と違えば中断する」こと（第9節）。
+  実際の防御は「置き場所が想定と違えば中断する」こと（`bootstrap.sh` の「0. 置き場所の確認」）。
   既に nvim を使っているマシンには、上書きせず `NVIM_APPNAME` で
   並べて入れる（README 参照）。
 - **herdr 上で作業する場合、閉じる操作は慎重に。** 作成は自由だが、閉じるときは
@@ -133,7 +133,7 @@ herdr の右ペインではこれを起動する。
 ## 4. 依存のインストール
 
 > **リポジトリの `scripts/bootstrap.sh` が、この節と第8節・第9節を自動化する。**
-> 設定ファイルを先に配置してから `~/.config/nvim/scripts/bootstrap.sh` を実行すれば、
+> 設定ファイルを先に配置してから `~/.config/nvim-viewer/scripts/bootstrap.sh` を実行すれば、
 > 依存の導入・パーサーの導入・起動確認までを一度に済ませられる。
 > 何度実行しても壊れず、入っているものは飛ばし、最後に何をしたかをまとめて出す。
 > 以下は**その中身を理解するため**と、手動でやりたい場合のための説明。
@@ -196,12 +196,13 @@ pyright ruff ruby_lsp solargraph intelephense phpactor clojure_lsp
 確認方法:
 
 ```bash
-ls ~/.local/share/nvim/lazy/nvim-lspconfig/lsp/ | grep '^<名前>\.lua$'
+ls ~/.local/share/nvim-viewer/lazy/nvim-lspconfig/lsp/ | grep '^<名前>\.lua$'
 ```
 
 同じ言語に複数のサーバが入っている場合は `skip_if` で優先順位を付ける
 （両方有効にすると診断が二重に出る）。現在は
-`vtsls` > `ts_ls`、`ruby_lsp` > `solargraph`、`intelephense` > `phpactor`。
+`vtsls` > `ts_ls`、`ruby_lsp` > `solargraph`、`intelephense` > `phpactor`、
+`sqls` > `sqlls` / `postgres_lsp`。
 
 起動後に `:LspEnabled` で、実際に有効になったものを確認できる。
 
@@ -244,7 +245,7 @@ cp "$NM/mermaid/dist/mermaid.min.js" ~/.local/share/nvim-md-preview/
 cp "$NM/marked/lib/marked.umd.js"    ~/.local/share/nvim-md-preview/
 
 # mmdc に既存の Chrome を使わせる（パスは環境に合わせる）
-cat > ~/.config/nvim/mermaid-puppeteer.json <<'EOF'
+cat > ~/.config/nvim-viewer/mermaid-puppeteer.json <<'EOF'
 {
   "executablePath": "/usr/bin/google-chrome",
   "args": ["--no-sandbox", "--disable-dev-shm-usage"]
@@ -464,7 +465,9 @@ HTMLコメントも不可視になるので `TreeWalker(NodeFilter.SHOW_COMMENT)
 - 幅の見積もりは**実際の描画と一致させる**（区切りを3桁で計算して1桁で描くと、必要以上に落とす）
 - **長いパスは先頭側を省略する**（`…/use-cases/register-user.ts`）。
   末尾＝今いる場所が最も重要。バイト単位で切ると多バイト文字が壊れるので
-  `strcharpart` と `strdisplaywidth` で1文字ずつ積む
+  `strcharpart` と `strwidth` で1文字ずつ積む。
+  **`strdisplaywidth` を使ってはいけない** — あれは現在窓の折り返し設定
+  （wrap / showbreak / breakindent）に依存し、狭い窓では値が膨らむ
 
 ### 6.4 マウスとパレット
 
@@ -490,13 +493,16 @@ HTMLコメントも不可視になるので `TreeWalker(NodeFilter.SHOW_COMMENT)
 ## 7. ディレクトリ構成
 
 ```text
-~/.config/nvim/
+~/.config/nvim-viewer/
 ├── init.lua
+├── LICENSE                      # MIT
 ├── README.md                    # ユーザー向けの使い方（強く推奨）
 ├── md-preview-template.html     # ブラウザプレビューのひな形
 ├── mermaid-puppeteer.json       # mmdc に既存Chromeを使わせる設定
 ├── scripts/
 │   └── bootstrap.sh             # 依存の導入をまとめて行う
+├── lazy-lock.json               # プラグインの版を固定（追跡する）
+├── docs/                        # この設計ノートと TODO
 └── lua/
     ├── core/
     │   ├── options.lua          # 閲覧専用設定・折り返し
@@ -766,7 +772,7 @@ Neovim のプラグインは **Lua のコードがユーザー権限でそのま
 | `lazy.nvim` | `lua/lazy/build.lua` | プラグインの取得（git）。本来の仕事 |
 | `snacks.nvim` | `lua/snacks/picker/source/icons.lua` | アイコン一覧の取得。**そのピッカーを開いたときだけ** |
 
-`nvim-lspconfig` に URL が861件見つかるが、**ほぼ全部が説明文**
+`nvim-lspconfig` に URL が860件見つかるが、**ほぼ全部が説明文**
 （各言語サーバの GitHub リンク）。実際に通信するコードは `lsp/gitlab_duo.lua` の1箇所のみで、
 これは有効化していない言語サーバの設定なので動かない。
 
@@ -784,7 +790,7 @@ git 42 / lazygit 7 / gh 6 / fd 6 / rg 5 / magick 3 / curl 3 / mmdc 2
 以下は静的な走査なので、ネットワークに繋がなくても実行できる。
 
 ```bash
-cd ~/.local/share/nvim/lazy
+cd ~/.local/share/nvim-viewer/lazy
 
 # 1) 出所・ライセンス・更新の鮮度
 for d in */; do d=${d%/}
@@ -810,7 +816,7 @@ done
 
 # 4) コミット固定の確認（勝手に更新されないこと）
 python3 -c "
-import json; d = json.load(open('$HOME/.config/nvim/lazy-lock.json'))
+import json; d = json.load(open('$HOME/.config/nvim-viewer/lazy-lock.json'))
 for k, v in sorted(d.items()): print(f'{k:26} {v.get(\"commit\",\"\")[:12]}')"
 ```
 

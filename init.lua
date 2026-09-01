@@ -7,6 +7,11 @@ vim.g.mapleader = " "
 vim.g.maplocalleader = " "
 
 -- lazy.nvim ブートストラップ
+--
+-- lazy.nvim 自身は lazy の管理外なので、`--branch=stable`（動くタグ）で
+-- 取ると lazy-lock.json の固定が効かない。新しく入れた人は起動した瞬間に
+-- ロックが書き換わり、`git status` が汚れる。
+-- ロックに記録があればその版に合わせる。
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not (vim.uv or vim.loop).fs_stat(lazypath) then
   vim.fn.system({
@@ -14,6 +19,18 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
     "https://github.com/folke/lazy.nvim.git",
     "--branch=stable", lazypath,
   })
+
+  local lock = vim.fn.stdpath("config") .. "/lazy-lock.json"
+  local okr, txt = pcall(vim.fn.readfile, lock)
+  if okr then
+    local okj, data = pcall(vim.json.decode, table.concat(txt, "\n"))
+    local pinned = okj and type(data) == "table"
+      and data["lazy.nvim"] and data["lazy.nvim"].commit
+    if pinned then
+      vim.fn.system({ "git", "-C", lazypath, "fetch", "--depth=1", "origin", pinned })
+      vim.fn.system({ "git", "-C", lazypath, "checkout", "--detach", pinned })
+    end
+  end
 end
 vim.opt.rtp:prepend(lazypath)
 

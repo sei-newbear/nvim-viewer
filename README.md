@@ -41,10 +41,10 @@ nvim-viewer
 
 起動は `bootstrap.sh` が用意する `~/.local/bin/nvim-viewer` から行う
 （中身は `exec env NVIM_APPNAME="nvim-viewer" nvim "$@"` の1行）。
-`~/.local/bin` が PATH に無ければ警告が出る。
+`~/.local/bin` が PATH に無ければ警告が出る（ラッパーを作成したときのみ）。
 
-`NVIM_APPNAME` を自分で打つ必要はない。**どこに clone したかで決まる**ので、
-`bootstrap.sh` が置き場所から判断する（symlink 経由でも実体を辿る）。
+`NVIM_APPNAME` を自分で打つ必要はない。**この設定の名前は `nvim-viewer` に決まっている**ので、
+`bootstrap.sh` がその前提で動く。別名にしたい場合だけ `NVIM_APPNAME` で上書きできる。
 
 ---
 
@@ -61,8 +61,8 @@ nvim-viewer
 | **mise のグローバル設定** | `mise use -g neovim@latest`。**そのマシン全体の Neovim が変わる** | Neovim が無い、または 0.11 未満のときだけ |
 | npm グローバル | `tree-sitter-cli` / `@vtsls/language-server` / `typescript` / `vscode-langservers-extracted` / `@mermaid-js/mermaid-cli` / `marked` を導入 | それぞれ未導入のときだけ |
 | `$GOBIN` | `go install gopls@latest` | go があり gopls が無いときだけ |
-| `~/.local/share/nvim-md-preview/` | `marked.umd.js` と `mermaid.min.js` を複製 | 常に |
-| `~/.local/bin/nvim-<名前>` | 起動用ラッパーを作成 | `NVIM_APPNAME` を使ったときだけ。**既存の別ファイルは上書きしない** |
+| `~/.local/share/nvim-md-preview/` | `marked.umd.js` と `mermaid.min.js` を複製 | npm があるときだけ |
+| `~/.local/bin/nvim-viewer` | 起動用ラッパーを作成 | 常に。**既存の別ファイルは上書きしない** |
 | リポジトリ直下 | `mermaid-puppeteer.json` を生成（git 管理外） | ブラウザが見つかったとき |
 
 **0.9 系など古い Neovim で安定させているマシンでは、`mise use -g` に注意。**
@@ -157,7 +157,7 @@ Space dd  差分を開く
 ```
 
 差分表示は変更箇所しか見えないので、前後の文脈を読むには `gf` で実ファイルを開く。
-**差分を見ている間はメニューバーに「ファイルを開く」ボタンが出る**ので、キーを忘れても押せる。
+**差分を見ている間はフッターに「ファイルを開く」ボタンが出る**ので、キーを忘れても押せる。
 
 横長で読みにくいときは `Space w` で折り返しを切り替える。差分では左右の窓に同時に効く。
 
@@ -287,7 +287,7 @@ git ルート相対にすると、エージェントが別のディレクトリ�
  …/application/use-cases/register-user-with-email-verification.ts                ← 今どこにいるか
    1 import type { User } from "../../../../types";
    …
- 定義 gd │ 戻る ⌃o │ 参照 gr │ 実装 gi │ 型 gy │ 一覧 ␣s │ 折り返し ␣w      12:5  ← 何ができるか
+ 定義 gd │ 戻る ⌃o │ 参照 gr │ 実装 gi │ 型 gy │ 一覧 ␣s │ blame ␣g │ 折り返し ␣w      12:5  ← 何ができるか
 ```
 
 | | 役割 | 中身 |
@@ -335,7 +335,7 @@ git ルート相対にすると、エージェントが別のディレクトリ�
 **フッターは開いているファイルで中身が変わる。**
 
 ```
-TypeScript    定義 gd │ 戻る ⌃o │ 参照 gr │ 実装 gi │ 型 gy │ 一覧 ␣s │ 折り返し ␣w
+TypeScript    定義 gd │ 戻る ⌃o │ 参照 gr │ 実装 gi │ 型 gy │ 一覧 ␣s │ blame ␣g │ 折り返し ␣w
 マークダウン  生ファイル ␣m │ ブラウザ ␣o │ blame ␣g │ 折り返し ␣w
 差分表示中    ファイルを開く gf │ 定義 gd │ 戻る ⌃o │ 参照 gr │ 実装 gi │ 型 gy │ 一覧 ␣s
 ```
@@ -602,7 +602,7 @@ typescript vim vimdoc yaml zig
 エラーにならず静かに無視される。
 
 ```bash
-ls ~/.local/share/nvim/lazy/nvim-lspconfig/lsp/ | grep '^<名前>\.lua$'
+ls ~/.local/share/nvim-viewer/lazy/nvim-lspconfig/lsp/ | grep '^<名前>\.lua$'
 ```
 
 ### いま自分の環境で何が効いているか
