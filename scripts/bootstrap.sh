@@ -23,32 +23,20 @@ set -uo pipefail
 # （個人アカウント用のディレクトリ配下に置きたい場合など）でも
 # 同じ場所だと判定できるようにするため。
 NVIM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-LIB_DIR="$HOME/.local/share/nvim-md-preview"
+# XDG_DATA_HOME を尊重する（Lua 側の md_preview.lua と同じ場所を指すこと）
+LIB_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/nvim-md-preview"
 PUPPETEER_JSON="$NVIM_DIR/mermaid-puppeteer.json"
 
-# nvim は $XDG_CONFIG_HOME/$NVIM_APPNAME を設定として読む（既定は nvim）。
+# この設定の名前。nvim は $XDG_CONFIG_HOME/$NVIM_APPNAME を設定として読む。
 #
-# その名前は **自分が置かれている場所から分かる**ので、人に打たせない。
-# ~/.config/nvim-viewer/scripts/bootstrap.sh として動いているなら
-# 答えは nvim-viewer。打ち間違いで壊れる余地も消える。
-# 明示的に NVIM_APPNAME が指定されていればそちらを尊重する。
+# **既定は nvim ではなく nvim-viewer。** 配布物なのだから名前は自分で名乗る。
+# 置き場所から推測すると、clone 先を変えただけで別人になってしまう。
+# ~/.config/nvim を占有しないので、普通の nvim と共存できる。
+#
+# 意図して別名にしたい場合だけ NVIM_APPNAME で上書きできる。
+DEFAULT_APPNAME="nvim-viewer"
+APPNAME="${NVIM_APPNAME:-$DEFAULT_APPNAME}"
 XDG_CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
-if [ -n "${NVIM_APPNAME:-}" ]; then
-  APPNAME="$NVIM_APPNAME"
-elif [ "$(dirname "$NVIM_DIR")" = "$(cd "$XDG_CFG" 2>/dev/null && pwd -P || echo "$XDG_CFG")" ]; then
-  APPNAME="$(basename "$NVIM_DIR")"
-else
-  # 設定ディレクトリの直下に無い（symlink 経由など）。
-  # その場合は $XDG_CONFIG_HOME の各項目から実体が一致するものを探す。
-  APPNAME="nvim"
-  for d in "$XDG_CFG"/*; do
-    [ -d "$d" ] || continue
-    if [ "$(cd "$d" 2>/dev/null && pwd -P)" = "$NVIM_DIR" ]; then
-      APPNAME="$(basename "$d")"
-      break
-    fi
-  done
-fi
 export NVIM_APPNAME="$APPNAME"   # 以降で呼ぶ nvim にも引き継ぐ
 # 起動コマンドの名前は導入先によらず常に同じにする。
 # 配布したときに「どちらで入れたか」を聞かないと
@@ -67,7 +55,7 @@ has() { command -v "$1" >/dev/null 2>&1; }
 # -------------------------------------------------------------------
 head_ "0. 置き場所の確認"
 # -------------------------------------------------------------------
-# nvim は $XDG_CONFIG_HOME/nvim（既定は ~/.config/nvim）しか見ない。
+# nvim は $XDG_CONFIG_HOME/$NVIM_APPNAME しか見ない。
 # 別の場所に clone した状態で実行すると、プラグインやパーサーの導入だけが
 # 「本物の設定」に対して行われ、意図しない結果になる。
 EXPECTED="${XDG_CONFIG_HOME:-$HOME/.config}/$APPNAME"
@@ -88,9 +76,7 @@ else
 fi
 
 # 既存の nvim 設定を壊していないかを、はっきり示す
-if [ "$APPNAME" != "nvim" ]; then
-  ok "既存の ~/.config/nvim には触れません（別名で並べて導入）"
-fi
+ok "~/.config/nvim には触れません（普通の nvim と共存します）"
 
 # -------------------------------------------------------------------
 head_ "1. 前提ツールの確認"
@@ -246,33 +232,20 @@ fi
 # -------------------------------------------------------------------
 head_ "8. 起動用コマンド"
 # -------------------------------------------------------------------
-# 別名で入れた場合、毎回 NVIM_APPNAME を打つのは現実的でないので
-# 短いラッパーを用意する。既定名（nvim）なら不要。
+# 毎回 NVIM_APPNAME を打つのは現実的でないので、短いラッパーを用意する。
 if [ -e "$LAUNCHER" ] && ! grep -q "$LAUNCHER_MARK" "$LAUNCHER" 2>/dev/null; then
   # 自分が作ったものでなければ絶対に触らない
   warn "$LAUNCHER が既にあります（別のもののようなので上書きしません）"
 else
   mkdir -p "$(dirname "$LAUNCHER")"
-  if [ "$APPNAME" = "nvim" ]; then
-    # 既定の場所に入れた場合。素の nvim がそのままビューアー。
-    cat > "$LAUNCHER" <<LAUNCH
-#!/usr/bin/env bash
-$LAUNCHER_MARK
-# このマシンでは ~/.config/nvim がビューアーなので、そのまま起動する
-exec nvim "\$@"
-LAUNCH
-  else
-    # 別名で入れた場合。既存の nvim 設定には触れない。
-    cat > "$LAUNCHER" <<LAUNCH
+  cat > "$LAUNCHER" <<LAUNCH
 #!/usr/bin/env bash
 $LAUNCHER_MARK
 # 既存の nvim 設定に触れずに、閲覧専用ビューアーを起動する
 exec env NVIM_APPNAME="$APPNAME" nvim "\$@"
 LAUNCH
-  fi
   chmod +x "$LAUNCHER"
   ok "起動コマンドを作成: $LAUNCHER"
-  [ "$APPNAME" = "nvim" ] && printf '    このマシンでは nvim でも同じものが立ちます\n'
   case ":$PATH:" in
     *":$(dirname "$LAUNCHER"):"*) : ;;
     *) warn "$(dirname "$LAUNCHER") が PATH にありません。シェルの設定に追加してください" ;;
@@ -308,7 +281,5 @@ if [ "${#WARN[@]}" -gt 0 ]; then
   for w in "${WARN[@]}"; do printf '    - %s\n' "$w"; done
 fi
 printf '\n  nvim-viewer を起動して、上部のメニューバーが出れば完了です。\n'
-if [ "$APPNAME" != "nvim" ]; then
-  printf '  通常の nvim は今までどおり、この設定の影響を受けません。\n'
-fi
+printf '  通常の nvim は今までどおり、この設定の影響を受けません。\n'
 printf '  使い方は README.md、キー一覧は起動後に ? を押してください。\n\n'

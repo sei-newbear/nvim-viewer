@@ -13,7 +13,11 @@
 
 local M = {}
 
-local LIB_DIR  = vim.fn.expand("~/.local/share/nvim-md-preview")
+-- 描画ライブラリの置き場所。bootstrap.sh がここへ複製する。
+-- 設定ごとに分けず共有する（中身は marked / mermaid で、どの設定でも同じ）。
+-- XDG_DATA_HOME を尊重する（bootstrap.sh と同じ場所を指すこと）。
+local LIB_DIR  = (vim.env.XDG_DATA_HOME or vim.fn.expand("~/.local/share"))
+  .. "/nvim-md-preview"
 local TEMPLATE = vim.fn.stdpath("config") .. "/md-preview-template.html"
 
 --- 依存が揃っているか確認する

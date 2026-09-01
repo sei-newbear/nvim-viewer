@@ -240,24 +240,20 @@ local function diff_context()
   -- 実ファイルの相対パス（リポジトリルート基準）
   local path = v.cur_entry and v.cur_entry.path or (file and file.path)
 
+  -- そのビューが対象にしているリポジトリのルート。
+  -- **nvim の cwd から求めてはいけない。** 差分の対象が cwd と別の
+  -- リポジトリだと、別リポジトリのルートを掴んで存在しないパスを送るか、
+  -- ルートが取れず diffview の内部パスがそのまま漏れる。
+  local root = v.adapter and v.adapter.ctx and v.adapter.ctx.toplevel
+
   -- Commit 行にハッシュを出すので、Side には重ねない。
   -- ハッシュが無いとき（作業ツリー/INDEX）だけ、どこの中身かを補う。
   return {
     rev = rev_sha,
     side = (not rev_sha and what) and ("%s（%s）"):format(label, what) or label,
     path = path,
+    root = root,
   }
-end
-
---- リポジトリのルートを返す
-local function repo_root(from)
-  local r = vim.system({ "git", "-C", from, "rev-parse", "--show-toplevel" },
-    { text = true }):wait()
-  if r.code == 0 and r.stdout then
-    local top = vim.trim(r.stdout)
-    if top ~= "" then return top end
-  end
-  return nil
 end
 
 --- ブレイムモード中なら、その行を入れたコミットを返す
@@ -276,10 +272,10 @@ local function build(srow, erow, cwd, selection)
   local range = (srow == erow) and tostring(srow) or ("%d-%d"):format(srow, erow)
   local dc = diff_context()
 
-  -- 差分側のバッファ名は内部表現なので、Diffview が持つ実パスに置き換える
-  if dc and dc.path then
-    local root = repo_root(vim.fn.getcwd())
-    if root then abs = root .. "/" .. dc.path end
+  -- 差分側のバッファ名は内部表現なので、Diffview が持つ実パスに置き換える。
+  -- ルートも Diffview から取る（cwd 基準にすると別リポジトリを掴む）。
+  if dc and dc.path and dc.root then
+    abs = dc.root .. "/" .. dc.path
   end
 
   local out = {
