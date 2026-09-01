@@ -36,7 +36,7 @@ function M.toggle(buf)
   -- 記録だけ書き換えると、以後ラベルと実際がずれ続ける。
   local mok, mgr = pcall(require, "render-markdown.core.manager")
   if not (mok and mgr.attached and mgr.attached(buf)) then
-    vim.notify("このバッファは整形表示の対象ではありません", vim.log.levels.WARN)
+    vim.notify("この画面は整形表示の対象ではありません", vim.log.levels.WARN)
     return M.is_rendered(buf)
   end
 
@@ -49,7 +49,8 @@ function M.toggle(buf)
   -- 片方だけ残ると「生ファイル」にならない。
   pcall(function() require("custom.frontmatter").set(buf, to_rendered) end)
 
-  vim.notify(to_rendered and "整形表示" or "生ファイル", vim.log.levels.INFO)
+  vim.notify(to_rendered and "整形表示に切り替えました" or "生ファイルに切り替えました",
+    vim.log.levels.INFO)
   return to_rendered
 end
 

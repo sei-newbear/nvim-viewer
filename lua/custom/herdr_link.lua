@@ -117,7 +117,7 @@ function M.resolve_target()
   end
 
   if not me then
-    return nil, false, "HERDR_PANE_ID が無い（herdr の外で起動している）", nil
+    return nil, false, "herdr の外で起動しています", nil
   end
 
   -- 左隣のペイン。
@@ -149,14 +149,14 @@ function M.resolve_target()
       panes[left] and panes[left].cwd or nil
   end
 
-  return nil, false, "送信先のエージェントが見つからない", nil
+  return nil, false, "このタブにも左隣にもエージェントが見つかりません", nil
 end
 
 -- ---- 送信 ----
 
 local function send_to_pane(target, has_agent, text)
   local bin = herdr_bin()
-  if not bin then return false, "herdr が見つからない" end
+  if not bin then return false, "herdr コマンドが見つかりません" end
 
   -- `agent send` は herdr 0.7.5 で廃止された。`pane send-text` は旧版・新版の
   -- 両方にあり、Enter を送らずにペインの入力欄へ文面を置けるので常にこれを使う。
@@ -312,11 +312,11 @@ end
 local function sendable()
   local buf = vim.api.nvim_get_current_buf()
   if vim.api.nvim_buf_get_name(buf) == "" then
-    vim.notify("保存されていないバッファは送れません", vim.log.levels.WARN)
+    vim.notify("まだ保存されていない画面は送れません", vim.log.levels.WARN)
     return false
   end
   if vim.bo[buf].buftype ~= "" and not vim.wo[vim.api.nvim_get_current_win()].diff then
-    vim.notify("このバッファは送れません（通常のファイルか差分で使ってください）",
+    vim.notify("この画面は送れません（ファイルか差分を開いて使ってください）",
       vim.log.levels.WARN)
     return false
   end
@@ -340,8 +340,13 @@ local function deliver(srow, erow, selection, label)
   -- フォールバック: クリップボードへ（貼り付けたときに行が繋がらないよう改行を付ける）
   vim.fn.setreg("+", text .. "\n")
   vim.fn.setreg('"', text .. "\n")
-  vim.notify(target and "クリップボードへコピーしました"
-    or ("クリップボードへコピーしました（%s）"):format(reason), vim.log.levels.INFO)
+  -- 送れなかった理由と、次にどうすればいいかまで伝える
+  if target then
+    vim.notify("クリップボードへコピーしました", vim.log.levels.INFO)
+  else
+    vim.notify(("%s。クリップボードへコピーしたので、エージェントの画面に貼り付けてください")
+      :format(reason), vim.log.levels.INFO)
+  end
 end
 
 -- ---- ビジュアルモード ----
@@ -548,8 +553,9 @@ vim.api.nvim_create_user_command("HerdrTarget", function()
         cwd or "(不明。絶対パスで送ります)", self_pane() or "(不明)"),
       vim.log.levels.INFO)
   else
-    vim.notify("送信先が見つかりません: " .. reason ..
-      "\n（Ctrl+L はクリップボードへコピーします）", vim.log.levels.WARN)
+    vim.notify(reason .. "\n" ..
+      "コマンドパレットの「送信先のエージェントを選ぶ」で指定できます。\n" ..
+      "そのままでも Ctrl+L はクリップボードへコピーします。", vim.log.levels.WARN)
   end
 end, { desc = "Ctrl+L の送信先を確認する" })
 

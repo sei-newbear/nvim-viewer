@@ -41,6 +41,12 @@ local BUTTONS = {
   -- トグルにすると、差分を見たくて押したのに閉じてしまい「効かない」と見える。
   -- 閉じるのは Space dc / Space 0 の役目。
   { label = "差分",       hint = "␣dd", prio = 90, run = function()
+      -- 既に差分タブに居るなら、押しても何も起きないので伝える
+      local okd, dv = pcall(require, "custom.diffview_util")
+      if okd and dv.view_at(vim.api.nvim_get_current_tabpage()) then
+        vim.notify("すでに差分を見ています", vim.log.levels.INFO)
+        return
+      end
       local ok, lib = pcall(require, "diffview.lib")
       if ok and lib.views then
         for _, v in ipairs(lib.views) do

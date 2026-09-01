@@ -475,6 +475,12 @@ end
 
 --- 全行表示 ⇄ 変わり目だけ を切り替える
 function M.toggle_density()
+  -- どのバッファでもブレイムが開いていないと、切り替えても画面は
+  -- 何も変わらない。成功したかのように報告しない。
+  if vim.tbl_isempty(state) then
+    vim.notify("ブレイムを開いていません（Space g で開始）", vim.log.levels.WARN)
+    return
+  end
   M.opts.only_changes = not M.opts.only_changes
   for buf in pairs(state) do
     if vim.api.nvim_buf_is_valid(buf) then render(buf) end

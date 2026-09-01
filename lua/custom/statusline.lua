@@ -94,6 +94,13 @@ local ITEMS = {
     run = function() require("snacks").picker.lsp_definitions() end },
   { label = "戻る", key = "⌃o", prio = 92, when = has_lsp,
     run = function()
+      -- ジャンプ履歴が無いと無反応になり、押せたのか分からない
+      local jumps = vim.fn.getjumplist()
+      if #jumps[1] == 0 or jumps[2] == 0 then
+        vim.notify("戻る場所がありません（まだどこにもジャンプしていません）",
+          vim.log.levels.INFO)
+        return
+      end
       vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<C-o>", true, false, true))
     end },
   { label = "参照", key = "gr", prio = 90, when = has_lsp,
@@ -115,7 +122,7 @@ local ITEMS = {
   -- 行ごとの由来。モード中はラベルを変えて「押すと終わる」ことを示す
   { label = function()
       local ok, b = pcall(require, "custom.blame")
-      return (ok and b.is_on(ctx_buf())) and "blame終了" or "blame"
+      return (ok and b.is_on(ctx_buf())) and "ブレイム終了" or "ブレイム"
     end,
     key = "␣g", prio = 45,
     when = function()

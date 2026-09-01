@@ -173,7 +173,11 @@ function M.open()
     -- strdisplaywidth は現在窓の折り返し設定に依存する。UI の幅は strwidth。
     width = math.max(width, vim.fn.strwidth(l))
   end
-  width = math.min(width + 4, vim.o.columns - 4)
+  -- 画面が狭いと右端が切れる。切れる場合は折り返して読めるようにする
+  -- （横スクロールの案内が無いまま切れるより、折り返す方がまし）。
+  local natural = width + 4
+  width = math.min(natural, vim.o.columns - 4)
+  local need_wrap = natural > width
   local height = math.min(#lines, vim.o.lines - 6)
 
   local buf = vim.api.nvim_create_buf(false, true)
@@ -201,10 +205,11 @@ function M.open()
     style = "minimal",
     border = "rounded",
     -- 内容が画面に収まらず末尾が見切れても操作方法が分かるよう、枠に出す
-    title = " キー操作早見表   j/k スクロール   q 閉じる ",
+    -- 全体の行数も出す（内容が長く、まだ下に続くことが分からなかった）
+    title = (" キー操作早見表  全%d行  j/k スクロール  q 閉じる "):format(#lines),
     title_pos = "center",
   })
-  vim.wo[win].wrap = false
+  vim.wo[win].wrap = need_wrap
   vim.wo[win].cursorline = false
 
   for _, key in ipairs({ "q", "<Esc>", "?" }) do

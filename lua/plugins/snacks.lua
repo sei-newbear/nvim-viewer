@@ -61,12 +61,24 @@ return {
                 keys = {
                   -- 閲覧専用ビューアーなので、ファイルを壊す操作は塞ぐ。
                   -- 編集・削除・移動は左ペインのエージェントに依頼する運用。
-                  ["a"] = false, -- 新規作成
-                  ["d"] = false, -- 削除
-                  ["r"] = false, -- リネーム
-                  ["c"] = false, -- コピー
-                  ["m"] = false, -- 移動
-                  ["p"] = false, -- 貼り付け
+                  -- 単に無効にすると、押しても無反応か英語のエラーが出るだけで
+                  -- 理由が伝わらない。なぜ使えないかを日本語で返す。
+                  ["a"] = { function() require("custom.readonly_hint").explain("新規作成") end,
+                            mode = { "n" }, desc = "閲覧専用（新規作成 はエージェントへ）" },
+                  ["d"] = { function() require("custom.readonly_hint").explain("削除") end,
+                            mode = { "n" }, desc = "閲覧専用（削除 はエージェントへ）" },
+                  ["r"] = { function() require("custom.readonly_hint").explain("リネーム") end,
+                            mode = { "n" }, desc = "閲覧専用（リネーム はエージェントへ）" },
+                  ["c"] = { function() require("custom.readonly_hint").explain("コピー") end,
+                            mode = { "n" }, desc = "閲覧専用（コピー はエージェントへ）" },
+                  ["m"] = { function() require("custom.readonly_hint").explain("移動") end,
+                            mode = { "n" }, desc = "閲覧専用（移動 はエージェントへ）" },
+                  ["p"] = { function() require("custom.readonly_hint").explain("貼り付け") end,
+                            mode = { "n" }, desc = "閲覧専用（貼り付け はエージェントへ）" },
+                  -- ツリーの中でも `?` は早見表を出す。既定では snacks 内蔵の
+                  -- ヘルプ（英語の内部アクション名）が開き、案内と食い違っていた。
+                  ["?"] = { function() require("custom.cheatsheet").open() end,
+                            mode = { "n" }, desc = "キー操作早見表" },
                 },
               },
             },
