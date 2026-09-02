@@ -122,7 +122,9 @@ local ITEMS = {
   -- 行ごとの由来。モード中はラベルを変えて「押すと終わる」ことを示す
   { label = function()
       local ok, b = pcall(require, "custom.blame")
-      return (ok and b.is_on(ctx_buf())) and "ブレイム終了" or "ブレイム"
+      -- ここは英語のまま。フッターは幅が狭く、`blame` の方が短く収まる。
+      -- パレットや早見表では日本語で説明しているので、意味は辿れる。
+      return (ok and b.is_on(ctx_buf())) and "blame終了" or "blame"
     end,
     key = "␣g", prio = 45,
     when = function()
