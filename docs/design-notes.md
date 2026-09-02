@@ -248,12 +248,17 @@ cp "$NM/marked/lib/marked.umd.js"    ~/.local/share/nvim-md-preview/
 cat > ~/.config/nvim-viewer/mermaid-puppeteer.json <<'EOF'
 {
   "executablePath": "/usr/bin/google-chrome",
-  "args": ["--no-sandbox", "--disable-dev-shm-usage"]
+  "args": ["--disable-dev-shm-usage"]
 }
 EOF
 ```
 
 複製した2つを `file://` で読むので、**ネットワークに繋がっていなくても動く**。
+
+`--no-sandbox` は**付けない**。素性の知れないリポジトリを読むための道具なので、
+mermaid の描画には信頼できない入力がそのまま渡る。そこで Chrome のプロセス
+サンドボックスを切るのは目的と矛盾する。user namespace が使えないコンテナ等で
+描画に失敗する場合だけ、利用者が自分の判断で足すこと。
 
 ---
 
@@ -611,7 +616,7 @@ nvim --headless <任意のソースファイル> -c 'lua vim.wait(4000)' -c 'lua
 #    差分を開いた状態でツリーからファイルを選び、差分タブが残ることを確認する
 
 # 6) ブラウザプレビューが描画されること
-google-chrome --headless --disable-gpu --no-sandbox --virtual-time-budget=8000 \
+google-chrome --headless --disable-gpu --virtual-time-budget=8000 \
   --dump-dom "file://$(ls -t ~/.cache/nvim/nvim-md-preview-*.html | head -1)" \
   | grep -c '<svg'   # mermaid が図になっていれば 1 以上
 ```

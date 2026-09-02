@@ -202,10 +202,16 @@ for c in google-chrome google-chrome-stable chromium chromium-browser microsoft-
   if has "$c"; then CHROME="$(command -v "$c")"; break; fi
 done
 if [ -n "$CHROME" ]; then
+  # --no-sandbox は付けない。
+  # このビューアーは「素性の知れないリポジトリを安全に読む」ための道具で、
+  # mermaid の描画には信頼できない入力がそのまま渡る。そこで Chrome の
+  # プロセスサンドボックスを切るのは、道具の目的と正面から矛盾する。
+  # コンテナなど user namespace が使えない環境で描画に失敗する場合だけ、
+  # 利用者が自分の判断で args に "--no-sandbox" を足すこと。
   cat > "$PUPPETEER_JSON" <<JSON
 {
   "executablePath": "$CHROME",
-  "args": ["--no-sandbox", "--disable-dev-shm-usage"]
+  "args": ["--disable-dev-shm-usage"]
 }
 JSON
   ok "mermaid-puppeteer.json を生成（$CHROME）"
