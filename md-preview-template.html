@@ -218,13 +218,26 @@
   tpl.innerHTML = marked.parse(split.body, { gfm: true, breaks: false });
 
   (function stripDangerous(root) {
-    var sel = 'meta,base,script,iframe,frame,frameset,object,embed,applet,form,link,noscript';
+    var sel = 'meta,base,script,iframe,frame,frameset,object,embed,applet,form,link,noscript,style';
     root.querySelectorAll(sel).forEach(function (el) { el.remove(); });
-    // イベント属性も落とす（CSP でも止まるが、二重にしておく）
     root.querySelectorAll('*').forEach(function (el) {
       for (var i = el.attributes.length - 1; i >= 0; i--) {
-        var n = el.attributes[i].name;
-        if (n.slice(0, 2).toLowerCase() === 'on') el.removeAttribute(n);
+        var n = el.attributes[i].name.toLowerCase();
+        // イベント属性を落とす（CSP でも止まるが二重に）
+        if (n.slice(0, 2) === 'on') { el.removeAttribute(n); continue; }
+        // 本文由来の style を落とす。
+        // 画面全体を覆う透明なリンク（position:fixed で全面）を作られると、
+        // どこをクリックしても攻撃者の URL へ遷移させられる。
+        // ページは自前の CSS を持つので、本文の style は不要。
+        if (n === 'style') el.removeAttribute(n);
+      }
+    });
+    // 残った <a> の href は、外部への遷移とスキームを絞る
+    root.querySelectorAll('a[href]').forEach(function (a) {
+      var h = (a.getAttribute('href') || '').trim();
+      // 相対・アンカー・file: 以外（http(s): や javascript: 等）は無効化
+      if (/^[a-z][a-z0-9+.-]*:/i.test(h) && !/^file:/i.test(h)) {
+        a.removeAttribute('href');
       }
     });
   })(tpl.content);

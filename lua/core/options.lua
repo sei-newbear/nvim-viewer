@@ -25,6 +25,13 @@ opt.timeoutlen = 400
 opt.laststatus = 3           -- グローバルステータスライン（分割時に見やすい）
 
 -- 閲覧専用なのでスワップ/バックアップ/undoファイルは不要
+-- modeline を無効化する。
+-- 悪意あるコードをレビューするビューアーなので、ファイル末尾の
+-- `vim: foldmethod=marker` のような行で、攻撃者がバックドアを
+-- フォールドや conceal でレビュアーの画面から隠せてはいけない。
+-- （危険オプションは Neovim が拒否するが、表示系オプションは通る）
+opt.modeline = false
+
 opt.swapfile = false
 opt.backup = false
 opt.writebackup = false

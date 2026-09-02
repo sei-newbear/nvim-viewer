@@ -258,6 +258,22 @@ local function show(sha, summary, pos)
   -- 回り、その間に外から nav が差し替わっても落ちないようにする。
   local ctx = nav
   local path = ctx.paths[sha] or ctx.rel
+  -- vim.cmd に文字列で渡すので、パスに改行や制御文字が入ると
+  -- 2行目以降が別の Ex コマンドとして解釈されうる。fnameescape は
+  -- 改行を行継続に変えて中和するが、その挙動はバージョン依存で繊細。
+  -- 悪意あるリポジトリはリネーム履歴に改行入りの名前を仕込めるので、
+  -- 制御文字を含むパスは弾く。
+  local function has_ctrl(str)
+    if not str then return false end
+    for k = 1, #str do local b = str:byte(k); if b < 32 then return true end end
+    return false
+  end
+  if has_ctrl(path) or has_ctrl(ctx.root) then
+    vim.notify("パスに制御文字が含まれるため、安全のため開きません", vim.log.levels.WARN)
+    switching = false
+    return
+  end
+
   local cmd = "DiffviewOpen "
   if ctx.root then cmd = cmd .. "-C" .. vim.fn.fnameescape(ctx.root) .. " " end
   vim.cmd(cmd .. ("%s^! -- %s"):format(sha, vim.fn.fnameescape(path)))
