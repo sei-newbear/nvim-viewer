@@ -232,11 +232,14 @@
         if (n === 'style') el.removeAttribute(n);
       }
     });
-    // 残った <a> の href は、外部への遷移とスキームを絞る
+    // href のスキームを絞る。
+    // http/https は**残す** — ドキュメントの普通のリンクを殺してはいけない。
+    // 危険なのは javascript: や data: のように、クリックでコードが動くもの。
+    // （画面全体を覆う透明リンクは、上で style を落とした時点で作れない）
     root.querySelectorAll('a[href]').forEach(function (a) {
-      var h = (a.getAttribute('href') || '').trim();
-      // 相対・アンカー・file: 以外（http(s): や javascript: 等）は無効化
-      if (/^[a-z][a-z0-9+.-]*:/i.test(h) && !/^file:/i.test(h)) {
+      var h = (a.getAttribute('href') || '').trim().toLowerCase();
+      var m = h.match(/^([a-z][a-z0-9+.-]*):/);
+      if (m && ['http', 'https', 'file', 'mailto'].indexOf(m[1]) === -1) {
         a.removeAttribute('href');
       }
     });
