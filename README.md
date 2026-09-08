@@ -627,7 +627,11 @@ ls ~/.local/share/nvim-viewer/lazy/nvim-lspconfig/lsp/ | grep '^<名前>\.lua$'
 | TypeScript / JavaScript | `npm i -g @vtsls/language-server typescript` |
 | JSON / HTML / CSS / ESLint | `npm i -g vscode-langservers-extracted` |
 | Go | `go install golang.org/x/tools/gopls@latest` |
+| Python | `npm i -g pyright` |
 | Kotlin | `~/.local/share/kotlin-lsp/` に fwcd 版を展開し、`~/.local/bin/kotlin-language-server` にラッパーを置く（`docs/design-notes.md` の第4.3節） |
+
+Pythonプロジェクトのルートにuv標準の `.venv/bin/python` があれば、
+Pyrightがその仮想環境を自動で使う。
 
 注意: npm 製のサーバは mise の Node インストール先に入るため、
 mise で Node のメジャーバージョンを上げた場合は入れ直しが必要。

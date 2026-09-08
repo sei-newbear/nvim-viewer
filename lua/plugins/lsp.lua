@@ -79,6 +79,15 @@ return {
         end
       end
 
+      local pyright_opts = {
+        before_init = function(_, config)
+          require("custom.python").configure(config)
+        end,
+      }
+      if vim.tbl_contains(enabled, "pyright") and vim.lsp.config then
+        vim.lsp.config("pyright", pyright_opts)
+      end
+
       -- ---- lspconfig に定義が無いもの ----
       -- Gauge（受け入れテスト）の仕様ファイル。
       -- 実装（Java / Kotlin など）へのジャンプはこのサーバが担う。
@@ -109,7 +118,8 @@ return {
           local ok, lspconfig = pcall(require, "lspconfig")
           if ok then
             for _, name in ipairs(enabled) do
-              pcall(function() lspconfig[name].setup({}) end)
+              local opts = name == "pyright" and pyright_opts or {}
+              pcall(function() lspconfig[name].setup(opts) end)
             end
           end
         end
