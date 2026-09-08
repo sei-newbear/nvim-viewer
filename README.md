@@ -597,6 +597,13 @@ typescript vim vimdoc yaml zig
 （`vtsls` > `ts_ls`、`ruby-lsp` > `solargraph`、`intelephense` > `phpactor`、
 `sqls` > その他の SQL）。両方有効にすると診断が二重に出るため。
 
+GaugeプロジェクトがMavenとKotlinを使う場合、GaugeはKotlinソースを直接解析できない。
+`target/test-classes` がなければ、LSP起動前に `mvn test-compile` を自動実行する。
+成果物があっても `gd` で定義を取得できなければ、ソース更新後の初回だけ再コンパイルして
+Gauge LSPを再起動する。Gaugeがコンパイル済みKotlinクラスのソース位置を返さない場合は、
+対応する `@Step` を検索して定義へジャンプする。コンパイル結果は
+`logs/nvim-viewer-compile.log` で確認できる。
+
 **ここに無い言語は、入れても有効にならない。** 足すには `candidates` に1行書く。
 名前は `nvim-lspconfig` の `lsp/<名前>.lua` に実在していないと、
 エラーにならず静かに無視される。

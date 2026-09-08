@@ -32,6 +32,8 @@ local function lsp_pick(source, fallback)
   end
 end
 
+local definition_pick = lsp_pick("lsp_definitions", vim.lsp.buf.definition)
+
 return {
   {
     "folke/snacks.nvim",
@@ -146,7 +148,7 @@ return {
       },
       {
         "gd",
-        lsp_pick("lsp_definitions", vim.lsp.buf.definition),
+        function() require("custom.gauge").definition(definition_pick) end,
         desc = "LSP: 定義へジャンプ",
       },
       {
