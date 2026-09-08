@@ -59,6 +59,9 @@ require("custom.md_preview")
 -- frontmatter を「メタデータ」として明示する
 require("custom.frontmatter")
 
+-- Gauge Spec の見出し・値・パラメータを読み分けやすくする
+require("custom.gauge_highlight")
+
 -- マークダウンの表示切替（整形 ⇄ 生）の状態管理
 require("custom.md_view")
 
