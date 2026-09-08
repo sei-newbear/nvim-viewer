@@ -31,6 +31,12 @@ assert(python.venv_path(project) == nil,
 vim.fn.delete(project .. "/.venv", "rf")
 assert(python.venv_path(project) == nil,
   ".venvがないプロジェクトでPythonパスを上書きした")
+local unchanged = { python = { analysis = { typeCheckingMode = "basic" } } }
+local no_venv_config = { root_dir = project, settings = unchanged }
+local before = vim.deepcopy(unchanged)
+python.configure(no_venv_config)
+assert(vim.deep_equal(no_venv_config.settings, before),
+  ".venvがないプロジェクトの既存Pyright設定を変更した")
 
 vim.fn.delete(temp, "rf")
 print("python_spec: OK")
