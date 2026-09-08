@@ -90,7 +90,7 @@ return {
           cmd = function(dispatchers, config)
             local root = config and config.root_dir or vim.fn.getcwd()
             return vim.lsp.rpc.start(
-              { "gauge", "daemon", "--lsp", "--dir", root }, dispatchers, { cwd = root })
+              require("custom.gauge").daemon_command(root), dispatchers, { cwd = root })
           end,
           filetypes = { "gauge" },
           root_markers = { "manifest.json", ".git" },
