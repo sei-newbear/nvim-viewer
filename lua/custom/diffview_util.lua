@@ -58,6 +58,102 @@ function M.view_at(tabpage)
   return nil
 end
 
+--- 現在の差分ビューにあるファイル一覧の操作名を返す。
+--- 差分ビューでなければ nil。
+---@param tabpage? integer
+---@return string?
+function M.file_panel_label(tabpage)
+  local view = M.view_at(tabpage or vim.api.nvim_get_current_tabpage())
+  if not (view and view.panel and view.panel.is_open) then return nil end
+  return view.panel:is_open() and "一覧を隠す" or "一覧を表示"
+end
+
+--- 現在の差分ビューのファイル一覧を開閉する。
+---@return boolean toggled
+function M.toggle_file_panel()
+  if not M.file_panel_label() then return false end
+  require("diffview.actions").toggle_files()
+  vim.schedule(function() pcall(vim.cmd, "redrawstatus") end)
+  return true
+end
+
+local default_resize_api = {
+  list_wins = function(tabpage) return vim.api.nvim_tabpage_list_wins(tabpage) end,
+  get_option = function(win, name) return vim.api.nvim_get_option_value(name, { win = win }) end,
+  set_option = function(win, name, value)
+    vim.api.nvim_set_option_value(name, value, { win = win })
+  end,
+  get_width = vim.api.nvim_win_get_width,
+  set_width = vim.api.nvim_win_set_width,
+}
+
+--- タブ内に左右2つの差分窓があれば、その幅を均等にする。
+--- ファイル一覧など差分以外の窓は一時的に幅固定して維持する。
+---@param tabpage? integer
+---@param api? table テスト用のウィンドウ操作
+---@return boolean equalized
+function M.equalize_diff_windows(tabpage, api)
+  tabpage = tabpage or 0
+  api = api or default_resize_api
+
+  local wins = api.list_wins(tabpage)
+  local diff_wins = {}
+  for _, win in ipairs(wins) do
+    if api.get_option(win, "diff") then
+      table.insert(diff_wins, win)
+    end
+  end
+  if #diff_wins ~= 2 then return false end
+
+  local original = {}
+  local original_widths = {}
+  local ok = pcall(function()
+    -- 先に全設定を読み取る。途中で読めなくても、窓の状態はまだ変わらない。
+    for _, win in ipairs(wins) do
+      original[win] = api.get_option(win, "winfixwidth")
+    end
+    for _, win in ipairs(wins) do
+      api.set_option(win, "winfixwidth", not api.get_option(win, "diff"))
+    end
+    for _, win in ipairs(diff_wins) do
+      original_widths[win] = api.get_width(win)
+    end
+    local total = original_widths[diff_wins[1]] + original_widths[diff_wins[2]]
+    api.set_width(diff_wins[1], math.floor(total / 2))
+    api.set_width(diff_wins[2], math.ceil(total / 2))
+  end)
+
+  if not ok then
+    for win, width in pairs(original_widths) do
+      pcall(api.set_width, win, width)
+    end
+  end
+  local restored = true
+  for _, win in ipairs(wins) do
+    if original[win] ~= nil then
+      restored = pcall(api.set_option, win, "winfixwidth", original[win]) and restored
+    end
+  end
+  return ok and restored
+end
+
+local resize_pending = false
+vim.api.nvim_create_autocmd("VimResized", {
+  group = vim.api.nvim_create_augroup("ViewerDiffviewResize", { clear = true }),
+  callback = function()
+    if resize_pending then return end
+    resize_pending = true
+    vim.schedule(function()
+      resize_pending = false
+      pcall(function()
+        local tabpage = vim.api.nvim_get_current_tabpage()
+        if M.view_at(tabpage) then M.equalize_diff_windows(tabpage) end
+      end)
+    end)
+  end,
+  desc = "外側のペイン変更時に左右の差分幅を揃える",
+})
+
 --- 開いているビューの数
 function M.count()
   return #views()

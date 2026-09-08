@@ -9,7 +9,7 @@
 -- 状況で出す項目が変わる:
 --   LSPが繋がっている  → 定義・参照・実装・型・一覧・戻る
 --   マークダウン        → 生ファイル⇄整形・ブラウザ
---   差分を見ている      → ファイルを開く
+--   差分を見ている      → ファイルを開く・ファイル一覧の開閉
 --   常時               → 折り返し
 -- LSP のジャンプ系とマークダウンの表示切替は、同じファイルで同時に出ない
 -- （マークダウンには LSP が繋がらない）ので、実際には混雑しない。
@@ -58,6 +58,12 @@ local function in_blame_nav()
   return ok and b.nav_state() ~= nil
 end
 
+local function diff_file_panel_label()
+  if in_blame_nav() then return nil end
+  local ok, util = pcall(require, "custom.diffview_util")
+  return ok and util.file_panel_label() or nil
+end
+
 local ITEMS = {
   -- 履歴の移動。差分を開いたまま前後のコミットへ行ける。
   -- キーを知らなくても押せるよう、クリックできる形でここに出す。
@@ -88,6 +94,10 @@ local ITEMS = {
       local ok = pcall(function() require("diffview.actions").goto_file_edit() end)
       if not ok then vim.notify("差分表示の中で使えます", vim.log.levels.WARN) end
     end },
+  { label = function() return diff_file_panel_label() or "一覧" end,
+    key = "␣e", prio = 99,
+    when = function() return diff_file_panel_label() ~= nil end,
+    run = function() require("custom.diffview_util").toggle_file_panel() end },
 
   -- コードを辿る
   { label = "定義", key = "gd", prio = 95, when = has_lsp,

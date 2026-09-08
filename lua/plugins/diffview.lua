@@ -64,7 +64,9 @@ return {
             { "n", "<Tab>",      actions.select_next_entry, { desc = "次のファイル" } },
             { "n", "<S-Tab>",    actions.select_prev_entry, { desc = "前のファイル" } },
             { "n", "gf",         actions.goto_file_edit,    { desc = "実ファイルを開く" } },
-            { "n", "<leader>e",  actions.toggle_files,      { desc = "ファイル一覧の表示切替" } },
+            { "n", "<leader>e", function()
+                require("custom.diffview_util").toggle_file_panel()
+              end, { desc = "ファイル一覧の表示切替" } },
           },
           file_panel = {
             { "n", "q", "<cmd>DiffviewClose<CR>", { desc = "差分を閉じて戻る" } },
@@ -76,7 +78,9 @@ return {
             { "n", "<Tab>",     actions.select_next_entry, { desc = "次のファイル" } },
             { "n", "<S-Tab>",   actions.select_prev_entry, { desc = "前のファイル" } },
             { "n", "gf",        actions.goto_file_edit,    { desc = "実ファイルを開く" } },
-            { "n", "<leader>e", actions.toggle_files,      { desc = "ファイル一覧の表示切替" } },
+            { "n", "<leader>e", function()
+                require("custom.diffview_util").toggle_file_panel()
+              end, { desc = "ファイル一覧の表示切替" } },
             { "n", "<leader>dc", actions.close,            { desc = "差分を閉じる" } },
           },
         },
