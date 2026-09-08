@@ -94,6 +94,9 @@ return {
           end,
           filetypes = { "gauge" },
           root_markers = { "manifest.json", ".git" },
+          handlers = {
+            ["window/showMessage"] = require("custom.gauge").show_message_handler,
+          },
         })
         table.insert(enabled, "gauge")
       end

@@ -46,6 +46,7 @@ assert(vim.deep_equal(gauge.daemon_command(temp .. "/plain-project"), {
 local command = gauge.daemon_command(temp .. "/project")
 local result = run(command, temp .. "/project", temp .. "/bin:" .. vim.env.PATH)
 assert(result.code == 0, result.stderr)
+assert(result.stderr == "", "正常な初回コンパイルで警告が出た: " .. result.stderr)
 assert(vim.fn.readfile(temp .. "/mvn.calls")[1]
   == "test-compile dependency:build-classpath -Dmdep.outputFile=target/gauge-classpath.txt "
     .. "-Dmdep.excludeArtifactIds=gauge-java")
@@ -77,6 +78,11 @@ local definitions = gauge.find_step_definitions(temp .. "/project",
   'Say hello to "Alice"')
 assert(#definitions == 1)
 assert(definitions[1].line == 2)
+assert(gauge.is_expected_source_message(
+  "implementation source not found: Step implementation referred from an external project or library"))
+assert(not gauge.is_expected_source_message("Step implementation not found"))
+assert(not gauge.is_expected_source_message(
+  "other: implementation source not found: Step implementation referred from an external project or library"))
 
 local sequence = {}
 local jump_count = 0

@@ -18,7 +18,7 @@ function M.daemon_command(root)
 root=$2
 cd "$root" || exit 1
 if [ ! -d target/test-classes ] || [ ! -f %s ]; then
-  mkdir -p logs
+  mkdir -p logs target
   snapshot=target/nvim-viewer-compile-start
   touch "$snapshot"
   "$1" test-compile dependency:build-classpath \
@@ -32,7 +32,7 @@ if [ ! -d target/test-classes ] || [ ! -f %s ]; then
   fi
   if [ -z "$(find pom.xml src/test -type f -newer "$snapshot" -print -quit 2>/dev/null)" ]; then
     find pom.xml src/test -type f \( -name pom.xml -o -name '*.kt' -o -name '*.java' \) \
-      | wc -l > %s
+      2>/dev/null | wc -l > %s
   fi
   rm -f "$snapshot"
 fi
@@ -150,6 +150,16 @@ function M.find_step_definitions(root, step)
     end
   end
   return definitions
+end
+
+function M.is_expected_source_message(message)
+  return message
+    == "implementation source not found: Step implementation referred from an external project or library"
+end
+
+function M.show_message_handler(error, result, context, config)
+  if result and M.is_expected_source_message(result.message) then return end
+  return vim.lsp.handlers["window/showMessage"](error, result, context, config)
 end
 
 local function open_step_definition(root, step)
