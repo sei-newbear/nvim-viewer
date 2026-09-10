@@ -87,6 +87,11 @@ return {
       if vim.tbl_contains(enabled, "pyright") and vim.lsp.config then
         vim.lsp.config("pyright", pyright_opts)
       end
+      local kotlin_opts = {}
+      if vim.tbl_contains(enabled, "kotlin_language_server") then
+        kotlin_opts = require("custom.kotlin").options()
+        if vim.lsp.config then vim.lsp.config("kotlin_language_server", kotlin_opts) end
+      end
 
       -- ---- lspconfig に定義が無いもの ----
       -- Gauge（受け入れテスト）の仕様ファイル。
@@ -118,7 +123,8 @@ return {
           local ok, lspconfig = pcall(require, "lspconfig")
           if ok then
             for _, name in ipairs(enabled) do
-              local opts = name == "pyright" and pyright_opts or {}
+              local opts = name == "pyright" and pyright_opts
+                or name == "kotlin_language_server" and kotlin_opts or {}
               pcall(function() lspconfig[name].setup(opts) end)
             end
           end

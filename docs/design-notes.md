@@ -208,8 +208,19 @@ ls ~/.local/share/nvim-viewer/lazy/nvim-lspconfig/lsp/ | grep '^<名前>\.lua$'
 
 #### Kotlin（Java が必要）
 
+fwcd 版 1.3.13 は Java 25 で `JavaVersion.parse` が失敗するため、
+`custom.kotlin` が `mise where java@temurin-21` から Java 21 を選び、
+LSP の `cmd_env.JAVA_HOME` にだけ設定する。`VIEWER_KOTLIN_JAVA_HOME` の明示指定が優先。
+索引の保存先は `before_init` の **送信パラメータ `initializationOptions`** に設定する。
+`config.init_options` を置き換えるだけでは初期化メッセージに反映されない。
+
+2026-09-10 に公式 Kotlin LSP 262.9593.0 も確認したが、
+配布元の最新リリース自体がビルド有効期限切れで起動しなかったため採用していない。
+期限の回避はせず、fwcd 1.3.13 と Java 21 の組み合わせで Maven の Kotlin ファイルから
+外部 Java ライブラリの定義取得と通常の `gd` を検証した。
+
 ```bash
-mise use -g java@temurin-21.0.12+101.0.LTS   # mise ls-remote java で選ぶ
+mise install java@temurin-21   # グローバルな既定Javaは変更しない
 mkdir -p ~/.local/share/kotlin-lsp ~/.local/bin
 curl -sL -o /tmp/kls.zip \
   https://github.com/fwcd/kotlin-language-server/releases/download/1.3.13/server.zip
@@ -415,7 +426,7 @@ HTMLコメントも不可視になるので `TreeWalker(NodeFilter.SHOW_COMMENT)
 
 ### 5.16 動作確認用スクリプトの注意
 
-- `nvim --headless` は `-c` の処理後も**終了しない**。必ず `+qa` か `vim.cmd("qa!")` で終わらせる。
+- `NVIM_APPNAME=nvim-viewer nvim --headless` は `-c` の処理後も**終了しない**。必ず `+qa` か `vim.cmd("qa!")` で終わらせる。
   終了し忘れたプロセスがペインを占有し、以後の操作が全て無反応になる
 - Vim の heredoc（`lua << EOF`）は `-c` 引数の中では使えない。Lua は別ファイルにして `-c 'luafile ...'`
 - `vtsls` を手で起動する場合 `--stdio` が必須
@@ -564,11 +575,11 @@ HTMLコメントも不可視になるので `TreeWalker(NodeFilter.SHOW_COMMENT)
 > `install`（未導入のものを入れる）→ `restore`（ロックの版に合わせる）の順で行う。
 
 ```bash
-nvim --headless "+Lazy! install" +qa
-nvim --headless "+Lazy! restore" +qa
+NVIM_APPNAME=nvim-viewer nvim --headless "+Lazy! install" +qa
+NVIM_APPNAME=nvim-viewer nvim --headless "+Lazy! restore" +qa
 
 # 一覧は lua/core/parsers.lua が持つ（ここに書き写すとズレる）
-nvim --headless -c 'lua
+NVIM_APPNAME=nvim-viewer nvim --headless -c 'lua
 local ts = require("nvim-treesitter")
 local h = ts.install(require("core.parsers"))
 if h and h.wait then h:wait(900000) end
@@ -584,7 +595,7 @@ print("導入済み " .. #ts.get_installed() .. " 件")
 
 ```bash
 # 1) 起動エラーが無いこと
-nvim --headless <任意のソースファイル> -c 'lua
+NVIM_APPNAME=nvim-viewer nvim --headless <任意のソースファイル> -c 'lua
   local n=0
   for l in vim.fn.execute("messages"):gmatch("[^\n]+") do
     if l:match("^E%d+:") then n=n+1; print(l) end
@@ -594,19 +605,19 @@ nvim --headless <任意のソースファイル> -c 'lua
   print("lsp=" .. table.concat(vim.g.viewer_lsp_enabled or {}, ","))' +qa
 
 # 2) マークダウンでエラーが出ず、折り返しが効くこと
-nvim --headless <任意の.md> -c 'lua vim.wait(3000)' -c 'lua
+NVIM_APPNAME=nvim-viewer nvim --headless <任意の.md> -c 'lua vim.wait(3000)' -c 'lua
   print("wrap=" .. tostring(vim.wo.wrap))
   print("ts=" .. tostring(vim.treesitter.highlighter.active[0] ~= nil))' +qa
 
 # 3) キーが割り当たっていること
-nvim --headless <任意の.md> -c 'lua vim.wait(1500)' -c 'lua
+NVIM_APPNAME=nvim-viewer nvim --headless <任意の.md> -c 'lua vim.wait(1500)' -c 'lua
   for _, k in ipairs({"?", "<F1>", "<C-p>", " c", " r", " m", " o", " /", " w", " 0"}) do
     local m = vim.fn.maparg(k, "n", false, true)
     print(string.format("%-6s -> %s", k, (m and m.desc) or "未設定"))
   end' +qa
 
 # 4) 3本の帯が出ること
-nvim --headless <任意のソースファイル> -c 'lua vim.wait(4000)' -c 'lua
+NVIM_APPNAME=nvim-viewer nvim --headless <任意のソースファイル> -c 'lua vim.wait(4000)' -c 'lua
   local tb, sl = require("custom.toolbar"), require("custom.statusline")
   local function c(s) return (s:gsub("%%#%w+#",""):gsub("%%%d+@[^@]+@",""):gsub("%%X","")) end
   print("上: " .. c(tb.render()))
@@ -848,3 +859,98 @@ for k, v in sorted(d.items()): print(f'{k:26} {v.get(\"commit\",\"\")[:12]}')"
 - **11.4 の監査は自分でも回せる**ことを伝える。信じてもらうのではなく確認してもらう
 - なお `lua/custom/` に置いた自作コードは外部と通信しない。
   日本語コメント付きなので、リポジトリを読めば確認できる
+
+### 11.7 Clojure の括弧色分け（2026-09-10 の追加監査）
+
+配布元は `https://github.com/HiPhish/rainbow-delimiters.nvim`。
+`3a0fc08dd39e8bf034a4cfef3f2845bd5f565a2e` の実行時 Lua/Vim コードと
+Clojure query を静的に確認した。通常経路に外部コマンド実行・通信・ソース書換え・
+編集中のコードの実行はない。ローカルログへの追記はある。
+テスト専用コードには子プロセス起動と fixture 書込みがあるが、通常経路から呼ばれない。
+実行時コードは Apache-2.0。プラグイン設定と `lazy-lock.json` の両方で監査版を固定し、
+Clojure のみを有効化する。Neovim 本体・ネイティブパーサー・将来版の安全性まで保証しない。
+
+### 11.8 Kotlin サーバーと差分更新の確認
+
+fwcd 1.3.13 は配布元 GitHub のリリースを使用する。ソースタグは
+`f532bcc9c6578f5a35009a8b5f281f93d4d131ba`。
+標準入出力で接続し、Maven の依存取得・ソース取得、索引と一時ソースのローカル書込みを行う。
+クラスパス解決ではプロジェクトや利用者設定のスクリプトを実行できるため、
+通常の LSP と同様に信頼できるプロジェクトで使う。公開ソースの入出力経路を確認したが、
+配布バイナリと全依存の再現ビルド監査を行ったものではない。
+
+追加・変更した検証は以下で実行できる（プラグインと Clojure パーサーの導入が必要）。
+
+```bash
+NVIM_APPNAME=nvim-viewer nvim --headless -u NONE -i NONE -n \
+  '+lua local ok, err = pcall(dofile, "tests/rainbow_spec.lua"); if not ok then print(err); vim.cmd("cquit") end' '+qa!'
+# 同じコマンドのファイル名を tests/kotlin_spec.lua / tests/diffview_refresh_spec.lua に置き換える。
+```
+
+括弧テストは対応・入れ子・文字列除外・言語限定を確認する。
+Kotlin 設定テストは Java の環境変数をサーバー内に限定し、索引の送信先をキャッシュにすることを確認する。
+差分更新テストは無変更時の再構築ゼロ、同じ状態・サイズでの外部保存の本文反映、追加・削除、1.25秒遅延中の連続更新、
+表示中ファイルの削除、更新中に閉じて開き直す動作を実物 Diffview で確認する。
+
+#### Kotlin の定義ジャンプを再確認する最小サンプル
+
+Java 21、Maven、fwcd 1.3.13 を用意し、以下の架空プロジェクトを作る。
+初回は Maven が公開依存ライブラリを取得するためネットワーク接続が必要。
+対象ソースのビルドやテスト実行は不要。
+
+`pom.xml`:
+
+```xml
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.example</groupId>
+  <artifactId>viewer-kotlin-check</artifactId>
+  <version>1.0-SNAPSHOT</version>
+  <dependencies>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-stdlib</artifactId>
+      <version>2.1.10</version>
+    </dependency>
+    <dependency>
+      <groupId>com.codeborne</groupId>
+      <artifactId>selenide</artifactId>
+      <version>7.13.0</version>
+    </dependency>
+  </dependencies>
+</project>
+```
+
+`src/main/kotlin/Example.kt`:
+
+```kotlin
+import com.codeborne.selenide.Configuration
+
+fun exampleBaseUrl(): String = Configuration.baseUrl
+```
+
+プロジェクトのルートで `nvim-viewer src/main/kotlin/Example.kt` を起動する。
+`:LspEnabled` に `kotlin_language_server` があり、`:checkhealth vim.lsp` で
+そのバッファへ接続済みになるまで待つ。初回は依存解析に時間がかかる。
+3行目の `Configuration` にカーソルを置いて `gd` を押す。
+期待結果は、一時ディレクトリの `Configuration*.java` に移動してクラス定義を表示し、
+`:setlocal modifiable?` が `nomodifiable` を返すこと。`Ctrl+o` で呼び出し元へ戻る。
+この確認は `tests/kotlin_spec.lua` の設定単体テストとは別に行う。
+
+### 11.9 通常ファイルの Git 変更印（2026-09-10）
+
+配布元 `https://github.com/lewis6991/gitsigns.nvim` の
+`f2421c550618d257048afa650413d9e542ddbe67` に設定とロックの両方で固定する。MIT。
+通常のサイン描画に関係する Git コマンド実行・差分計算・ファイル入出力経路を確認した。
+Git は引数配列で実行し、通常の表示ではローカルの内容を読み取る。
+差分計算の `loadstring` はプラグイン内の関数をワーカースレッドへ渡すもので、
+閲覧するソースをコードとして実行しない。Lua に直接の HTTP 通信処理は見つからなかった。
+Git や Neovim 本体、全依存の安全性まで保証するものではない。
+
+プラグインにはステージ・変更取り消しなどの明示的な書込み操作も存在するが、
+ビューアー設定ではその操作にキーを割り当てない。通常表示の印と行番号の色だけを有効にし、
+行全体の背景・行内差分・行末ブレイムは有効化しない。
+
+`tests/gitsigns_spec.lua` は、通常ウィンドウで追加・変更・削除の印と行番号の色、
+新規ファイルへの追加印、テーマ変更後の色を実物プラグインで確認する。
+実行は第11.8節と同じコマンドのテストパスを `tests/gitsigns_spec.lua` に置き換える。

@@ -149,6 +149,15 @@ nvim-viewer <ファイル or ディレクトリ>
 
 ## よく使う流れ：差分 → ファイル全体 → 定義へ
 
+2画面の差分は変更前を赤系、変更後を緑系で表示する。
+行全体の背景に加え、変更した文字を濃く表示し、構文ハイライトは残す。
+外部保存を毎秒確認するが、変更がない間は差分一覧を再構築しない。
+更新は完了を待ってから次へ進め、表示中のファイルが削除された場合も一覧へ反映する。
+
+通常のファイル表示でも、行番号とその横の印に Git の変更を表示する。
+追加は緑、変更は青、削除位置は赤。ステージ済みの変更は淡い色で区別し、
+未追跡の新規ファイルにも追加の印を付ける。
+
 ```
 Space dd  差分を開く
   → Tab   ファイルを選ぶ
@@ -560,6 +569,10 @@ Diffview・lazy.nvim などの UI バッファは対象外（除外しないと�
 
 ### ハイライト（追加インストール不要）
 
+Clojure は `()`・`[]`・`{}` を入れ子ごとに色分けし、対応する括弧を同色で表示する。
+文字列内の括弧は対象外。`rainbow-delimiters.nvim` は実行時コードを監査した
+コミットに固定し、Clojure のみに有効化している。
+
 一覧は `lua/core/parsers.lua`。`:TSInstalled` で導入済みを確認できる。
 
 ```
@@ -636,6 +649,13 @@ ls ~/.local/share/nvim-viewer/lazy/nvim-lspconfig/lsp/ | grep '^<名前>\.lua$'
 | Python | `npm i -g pyright` |
 | Kotlin | `~/.local/share/kotlin-lsp/` に fwcd 版を展開し、`~/.local/bin/kotlin-language-server` にラッパーを置く（`docs/design-notes.md` の第4.3節） |
 
+Kotlin の fwcd 版 1.3.13 は Java 25 では起動できない。
+`mise where java@temurin-21` で見つかるインストール済み Java 21 を言語サーバーだけに使う。
+mise 以外で管理している場合は、起動前に `VIEWER_KOTLIN_JAVA_HOME` へ対応 JDK の場所を指定する。
+索引は nvim-viewer のキャッシュ領域へ保存し、閲覧するリポジトリには作らない。
+外部ライブラリへのジャンプでは、サーバーが抽出・逆コンパイルした一時ファイルを開く。
+サーバーが行位置を返さない Java メソッドは、定義ファイルの先頭に着地する場合がある。
+
 Pythonプロジェクトのルートにuv標準の `.venv/bin/python` があれば、
 Pyrightがその仮想環境を自動で使う。
 
@@ -655,7 +675,9 @@ mise で Node のメジャーバージョンを上げた場合は入れ直しが
 |---|---|
 | **GPL-3.0-or-later** | `diffview.nvim` |
 | Apache-2.0 | `lazy.nvim` / `nvim-lspconfig` / `nvim-treesitter` / `snacks.nvim` / `which-key.nvim` |
+| Apache-2.0 | `rainbow-delimiters.nvim`（実行時コード） |
 | MIT | `nvim-web-devicons` / `plenary.nvim` / `render-markdown.nvim` |
+| MIT | `gitsigns.nvim` |
 
 `bootstrap.sh` が npm から入れる `marked` / `mermaid` / `@mermaid-js/mermaid-cli` は
 いずれも MIT。これらも同梱しておらず、利用者のマシンで取得する。

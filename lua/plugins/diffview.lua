@@ -24,6 +24,9 @@ return {
       require("custom.diffview_refresh").setup()
       return {
         enhanced_diff_hl = true,   -- 差分の色分けを強調
+        hooks = {
+          diff_buf_win_enter = require("custom.diffview_highlight").apply,
+        },
         view = {
           -- 左右分割のサイドバイサイド表示
           default = { layout = "diff2_horizontal", winbar_info = true },
