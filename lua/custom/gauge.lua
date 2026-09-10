@@ -228,6 +228,8 @@ end
 
 local function restart(client, bufnr, callback)
   local config = vim.deepcopy(client.config)
+  -- ビルド後の再起動で同じ診断から自動ビルドを繰り返さない。
+  config._viewer_gauge_auto_attempted = true
   local root = client.root_dir
   local buffers = vim.tbl_keys(client.attached_buffers)
   local group = vim.api.nvim_create_augroup(
@@ -286,6 +288,56 @@ local function restart(client, bufnr, callback)
       finish(false)
     end
   end, 15000)
+end
+
+local function has_missing_step(result)
+  for _, diagnostic in ipairs(result.diagnostics or {}) do
+    if diagnostic.severity == 1 and diagnostic.message == "Step implementation not found" then
+      return true
+    end
+  end
+  return false
+end
+
+--- 起動時の未実装診断に対して一度だけビルドする。
+--- 状態は再起動時にも引き継ぐclient.configに保持する。
+function M.on_diagnostics(result, deps)
+  if not deps.client or not deps.is_maven then return end
+  local config = deps.client.config
+  if config._viewer_gauge_auto_attempted or not has_missing_step(result) then return end
+  config._viewer_gauge_auto_attempted = true
+  local root = deps.client.root_dir
+  local key = root .. "\n" .. deps.source_stamp
+  if deps.already_compiled or compiled_sources[key] or compiling_roots[root] then return end
+  compiling_roots[root] = true
+  deps.compile(root, function(ok)
+    if not ok then
+      compiling_roots[root] = nil
+      return
+    end
+    compiled_sources[key] = true
+    deps.restart(deps.client, deps.bufnr, function()
+      compiling_roots[root] = nil
+    end)
+  end)
+end
+
+function M.publish_diagnostics_handler(error, result, context, config)
+  vim.lsp.diagnostic.on_publish_diagnostics(error, result, context, config)
+  if error or not result or not result.uri or not has_missing_step(result) then return end
+  local client = vim.lsp.get_client_by_id(context.client_id)
+  local bufnr = vim.fn.bufnr(vim.uri_to_fname(result.uri))
+  -- Gaugeは未表示のspecにも診断を送る。開いたGaugeバッファだけ対象にする。
+  if not client or client.name ~= "gauge" or client.config._viewer_gauge_auto_attempted or bufnr < 1
+      or not vim.api.nvim_buf_is_loaded(bufnr) or vim.bo[bufnr].filetype ~= "gauge"
+      or not client.attached_buffers[bufnr] then return end
+  local root = client.root_dir
+  if not root or not vim.uv.fs_stat(root .. "/pom.xml") then return end
+  M.on_diagnostics(result, {
+    client = client, bufnr = bufnr, is_maven = true,
+    source_stamp = source_stamp(root), already_compiled = build_is_fresh(root),
+    compile = compile, restart = restart,
+  })
 end
 
 local function default_dependencies()
@@ -369,13 +421,14 @@ function M.definition(fallback, dependencies)
 
     compiling_roots[root] = true
     deps.compile(root, function(ok)
-      compiling_roots[root] = nil
       if not ok then
+        compiling_roots[root] = nil
         if deps.no_definition then deps.no_definition() end
         return
       end
       compiled_sources[compile_key] = true
       deps.restart(deps.client, deps.bufnr, function(restarted)
+        compiling_roots[root] = nil
         if restarted and deps.after_restart then
           deps.after_restart(fallback)
         elseif deps.no_definition then

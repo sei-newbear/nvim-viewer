@@ -618,6 +618,10 @@ typescript vim vimdoc yaml zig
 
 GaugeプロジェクトがMavenとKotlinを使う場合、GaugeはKotlinソースを直接解析できない。
 `target/test-classes` がなければ、LSP起動前に `mvn test-compile` を自動実行する。
+成果物がある場合はそのまま起動する。開いたGaugeファイルに「Step implementation not found」
+というエラー診断が届いた場合は、一度だけコンパイルし、成功後にLSPを再起動する。
+再起動後も診断が残る場合やビルド失敗時には、自動リトライしない。
+起動前または診断を契機に同じソースをコンパイル済みなら、重ねてビルドしない。
 成果物があっても `gd` で定義を取得できなければ、ソース更新後の初回だけ再コンパイルして
 Gauge LSPを再起動する。Gaugeがコンパイル済みKotlinクラスのソース位置を返さない場合は、
 対応する `@Step` を検索して定義へジャンプする。コンパイル結果は

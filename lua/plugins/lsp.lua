@@ -110,6 +110,7 @@ return {
           root_markers = { "manifest.json", ".git" },
           handlers = {
             ["window/showMessage"] = require("custom.gauge").show_message_handler,
+            ["textDocument/publishDiagnostics"] = require("custom.gauge").publish_diagnostics_handler,
           },
         })
         table.insert(enabled, "gauge")
