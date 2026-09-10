@@ -49,6 +49,7 @@ vim.api.nvim_create_autocmd("FileType", {
   group = vim.api.nvim_create_augroup("ViewerWrapText", { clear = true }),
   pattern = { "markdown", "text", "gitcommit", "help" },
   callback = function()
+    if require("custom.view_opts").apply_wrap() then return end
     vim.opt_local.wrap = true
     vim.opt_local.linebreak = true    -- 単語の途中で折らない
     vim.opt_local.breakindent = true  -- 折り返し行のインデントを揃える

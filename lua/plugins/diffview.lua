@@ -25,7 +25,10 @@ return {
       return {
         enhanced_diff_hl = true,   -- 差分の色分けを強調
         hooks = {
-          diff_buf_win_enter = require("custom.diffview_highlight").apply,
+          diff_buf_win_enter = function(buf, win, ctx)
+            require("custom.diffview_highlight").apply(buf, win, ctx)
+            require("custom.view_opts").apply_wrap(win)
+          end,
         },
         view = {
           -- 左右分割のサイドバイサイド表示
@@ -68,11 +71,13 @@ return {
             { "n", "<Tab>",      actions.select_next_entry, { desc = "次のファイル" } },
             { "n", "<S-Tab>",    actions.select_prev_entry, { desc = "前のファイル" } },
             { "n", "gf",         actions.goto_file_edit,    { desc = "実ファイルを開く" } },
+            { "n", "<leader>h",  actions.focus_files,       { desc = "差分一覧へ戻る" } },
             { "n", "<leader>e", function()
                 require("custom.diffview_util").toggle_file_panel()
               end, { desc = "ファイル一覧の表示切替" } },
           },
           file_panel = {
+            { "n", "<cr>", actions.focus_entry, { desc = "差分を開いて本文へ移動" } },
             { "n", "q", "<cmd>DiffviewClose<CR>", { desc = "差分を閉じて戻る" } },
             { "n", "<leader>cO", false },
             { "n", "<leader>cT", false },

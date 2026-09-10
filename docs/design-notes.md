@@ -868,7 +868,9 @@ Clojure query を静的に確認した。通常経路に外部コマンド実行
 編集中のコードの実行はない。ローカルログへの追記はある。
 テスト専用コードには子プロセス起動と fixture 書込みがあるが、通常経路から呼ばれない。
 実行時コードは Apache-2.0。プラグイン設定と `lazy-lock.json` の両方で監査版を固定し、
-Clojure のみを有効化する。Neovim 本体・ネイティブパーサー・将来版の安全性まで保証しない。
+初回はClojureのみを有効化した。その後、言語制限を外してパーサーとqueryが揃う言語へ拡張した。
+追加でLua・Kotlin・Java・Python・TypeScriptのqueryと、同梱queryの述語を確認した。
+Neovim 本体・ネイティブパーサー・将来版の安全性まで保証しない。
 
 ### 11.8 Kotlin サーバーと差分更新の確認
 
@@ -887,7 +889,8 @@ NVIM_APPNAME=nvim-viewer nvim --headless -u NONE -i NONE -n \
 # 同じコマンドのファイル名を tests/kotlin_spec.lua / tests/diffview_refresh_spec.lua に置き換える。
 ```
 
-括弧テストは対応・入れ子・文字列除外・言語限定を確認する。
+括弧テストはClojureの対応・入れ子・文字列除外、Lua・Kotlin・Java・Python・TypeScriptの
+対応と入れ子、および未対応のプレーンテキストで有効化しないことを確認する。
 Kotlin 設定テストは Java の環境変数をサーバー内に限定し、索引の送信先をキャッシュにすることを確認する。
 差分更新テストは無変更時の再構築ゼロ、同じ状態・サイズでの外部保存の本文反映、追加・削除、1.25秒遅延中の連続更新、
 表示中ファイルの削除、更新中に閉じて開き直す動作を実物 Diffview で確認する。

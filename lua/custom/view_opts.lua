@@ -3,10 +3,30 @@
 -- 表示オプションの切り替え（折り返し・行番号）
 --
 -- 差分は左右2つの窓で1つの内容を見るものなので、片方だけ折り返すと
--- 行がずれて比較できなくなる。切り替えは常にタブ内の全窓へ適用する。
+-- 行がずれて比較できなくなる。左右へ同時に適用し、次のファイルにも引き継ぐ。
 -- ===================================================================
 
 local M = {}
+local wrap_preference
+
+--- 一度選んだ折返しを、以後表示する通常ファイルと差分へ引き継ぐ。
+function M.apply_wrap(win)
+  win = win or vim.api.nvim_get_current_win()
+  if wrap_preference == nil or not vim.api.nvim_win_is_valid(win) then return false end
+  local buf = vim.api.nvim_win_get_buf(win)
+  if vim.api.nvim_win_get_config(win).relative ~= "" then return false end
+  if not vim.wo[win].diff and (vim.bo[buf].buftype ~= ""
+      or vim.bo[buf].filetype:match("^Diffview")) then return false end
+  vim.wo[win].wrap = wrap_preference
+  vim.wo[win].linebreak = wrap_preference
+  vim.wo[win].breakindent = wrap_preference
+  return true
+end
+
+vim.api.nvim_create_autocmd({ "BufWinEnter", "WinEnter", "FileType" }, {
+  group = vim.api.nvim_create_augroup("ViewerWrapPreference", { clear = true }),
+  callback = function() M.apply_wrap() end,
+})
 
 --- 対象にする窓の一覧
 --- タブ内に差分の窓があればそちら（左右まとめて）、無ければ現在の窓だけ
@@ -33,12 +53,9 @@ function M.toggle_wrap()
   local cur = vim.api.nvim_get_current_win()
   local base = vim.tbl_contains(wins, cur) and cur or wins[1]
   local to = not vim.wo[base].wrap
-  for _, w in ipairs(wins) do
-    vim.wo[w].wrap = to
-    -- off のときも書き戻す。付けっぱなしにすると、その窓のオプションが
-    -- 既定から外れたまま残る。
-    vim.wo[w].linebreak = to    -- 単語の途中で折らない
-    vim.wo[w].breakindent = to  -- 折り返し行のインデントを揃える
+  wrap_preference = to
+  for _, w in ipairs(vim.api.nvim_list_wins()) do
+    M.apply_wrap(w)
   end
   vim.notify(
     ("折り返し: %s%s"):format(to and "する" or "しない",

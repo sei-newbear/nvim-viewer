@@ -6,7 +6,6 @@ return {
     lazy = false,
     init = function()
       vim.g.rainbow_delimiters = {
-        whitelist = { "clojure" },
         strategy = { [""] = "rainbow-delimiters.strategy.global" },
       }
     end,
