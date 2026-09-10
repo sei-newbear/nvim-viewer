@@ -21,6 +21,7 @@ return {
     },
     opts = function()
       local actions = require("diffview.actions")
+      require("custom.diffview_refresh").setup()
       return {
         enhanced_diff_hl = true,   -- 差分の色分けを強調
         view = {
