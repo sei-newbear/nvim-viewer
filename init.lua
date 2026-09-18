@@ -62,6 +62,9 @@ require("custom.frontmatter")
 -- Gauge Spec の見出し・値・パラメータを読み分けやすくする
 require("custom.gauge_highlight")
 
+-- Tree-sitter が拾わない SQL 方言の色を標準 syntax で補う
+require("custom.sql_highlight")
+
 -- マークダウンの表示切替（整形 ⇄ 生）の状態管理
 require("custom.md_view")
 
